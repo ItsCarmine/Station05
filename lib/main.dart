@@ -18,6 +18,8 @@ class todoScreen extends StatefulWidget {
 
 class todoScreenState extends State<todoScreen> {
   int selectedPage = 1;
+  //empty list to hold the categories that we create when clicking the plus button on the bottom
+  List<String> categories = [];
 
   @override
   Widget build(BuildContext context) {
@@ -53,7 +55,8 @@ class todoScreenState extends State<todoScreen> {
         ],
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () {},
+        //when the button is pressed, it will show the dialog box ( in this case the dialog box is the categories)
+        onPressed: () => _showCategoryDialog(context),
         child: Icon(Icons.add, size: 32),
       ),
     );
@@ -97,6 +100,188 @@ class todoScreenState extends State<todoScreen> {
           ),
         ],
       ),
+    );
+  }
+// this displays a dialog for selecting existing categories or creating a new one 
+  void _showCategoryDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text("To create a new task, please select a category or create a new one."),
+          content: Container(
+            width: double.maxFinite,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Show existing categories if any
+                ...categories.map((category) => Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4.0),
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Color(0xFF8D5353), // Brown color 
+                      foregroundColor: Colors.white,
+                      minimumSize: Size(double.infinity, 50),
+                    ),
+                    onPressed: () {
+                      Navigator.of(context).pop();
+                      _showCategoryOptionsDialog(context, category);
+                    },
+                    child: Text(category),
+                  ),
+                )),
+                
+                // Create New Category button - always shown
+                SizedBox(height: 10),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.grey[300],
+                    foregroundColor: Colors.black,
+                    minimumSize: Size(double.infinity, 50),
+                  ),
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    _showCreateCategoryDialog(context);
+                  },
+                  child: Text("Create New Category"),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+// this displays a dialog for example entering a new category name and adding it to the list
+  void _showCreateCategoryDialog(BuildContext context) {
+    String newCategory = '';
+    
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text("Create New Category"),
+          content: TextField(
+            onChanged: (value) {
+              newCategory = value;
+            },
+            decoration: InputDecoration(hintText: "Enter category name"),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                _showCategoryDialog(context); // Return to main dialog
+              },
+              child: Text("Cancel"),
+            ),
+            TextButton(
+              onPressed: () {
+                if (newCategory.isNotEmpty) {
+                  setState(() {
+                    categories.add(newCategory);
+                  });
+                }
+                Navigator.of(context).pop();
+                _showCategoryDialog(context); // Return to main dialog
+              },
+              child: Text("Create"),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _showCategoryOptionsDialog(BuildContext context, String category) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text(category),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Add Task button
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue,
+                  foregroundColor: Colors.white,
+                  minimumSize: Size(double.infinity, 50),
+                ),
+                onPressed: () {
+                  Navigator.of(context).pop();
+                  _showAddTaskDialog(context, category);
+                },
+                child: Text("Add Task"),
+              ),
+              
+              SizedBox(height: 10),
+              
+              // Remove Category button
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.red,
+                  foregroundColor: Colors.white,
+                  minimumSize: Size(double.infinity, 50),
+                ),
+                onPressed: () {
+                  setState(() {
+                    categories.remove(category);
+                  });
+                  Navigator.of(context).pop();
+                },
+                child: Text("Remove Category"),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _showAddTaskDialog(BuildContext context, String category) {
+    String newTask = '';
+    
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text("Add Task to $category"),
+          content: TextField(
+            onChanged: (value) {
+              newTask = value;
+            },
+            decoration: InputDecoration(hintText: "Enter task description"),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                _showCategoryOptionsDialog(context, category);
+              },
+              child: Text("Cancel"),
+            ),
+            TextButton(
+              onPressed: () {
+                if (newTask.isNotEmpty) {
+                  // Here you would add the task to a tasks list
+                  // For now, we'll just show a confirmation
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text("Task added to $category: $newTask"),
+                      duration: Duration(seconds: 2),
+                    ),
+                  );
+                }
+                Navigator.of(context).pop();
+              },
+              child: Text("Add"),
+            ),
+          ],
+        );
+      },
     );
   }
 }

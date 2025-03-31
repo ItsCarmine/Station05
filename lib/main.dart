@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'task_model.dart'; // Import the new Task model
+import 'dart:math'; // For generating random IDs
 
 void main() {
   runApp(NoTitle());
@@ -21,7 +23,35 @@ class todoScreenState extends State<todoScreen> {
   DateTime _selectedDate = DateTime.now();
   DateTime _focusedDate = DateTime.now();
 
-  List<String> categories = [];
+  // Replace categories list with a map to store tasks per category
+  // List<String> categories = [];
+  Map<String, List<Task>> tasksByCategory = {};
+
+  // Helper to generate unique IDs for tasks
+  String _generateUniqueId() {
+    return DateTime.now().millisecondsSinceEpoch.toString() + Random().nextInt(1000).toString();
+  }
+
+  // Helper to get tasks for the selected date
+  List<Task> _getTasksForSelectedDate() {
+    List<Task> tasks = [];
+    tasksByCategory.values.forEach((taskList) {
+      tasks.addAll(taskList.where((task) => DateUtils.isSameDay(task.dueDate, _selectedDate)));
+    });
+    // Sort tasks, e.g., by completion status or title
+    tasks.sort((a, b) {
+      if (a.isCompleted != b.isCompleted) {
+        return a.isCompleted ? 1 : -1; // Uncompleted tasks first
+      }
+      return a.title.compareTo(b.title);
+    });
+    return tasks;
+  }
+
+  // Helper to check if a date has any tasks
+  bool _dateHasTasks(DateTime date) {
+    return tasksByCategory.values.any((taskList) => taskList.any((task) => DateUtils.isSameDay(task.dueDate, date)));
+  }
 
   DateTime _getStartOfWeek(DateTime date) {
     return date.subtract(Duration(days: date.weekday - 1));
@@ -125,12 +155,8 @@ class todoScreenState extends State<todoScreen> {
           SizedBox(height: 20),
           buildPageSelect(),
           Expanded(
-            child: Center(
-              child: Text(
-                "No tasks available",
-                style: TextStyle(fontSize: 16, color: Colors.grey),
-              ),
-            ),
+            // Display tasks for the selected date
+            child: _buildTaskList(),
           ),
         ],
       ),
@@ -177,27 +203,47 @@ class todoScreenState extends State<todoScreen> {
             children: daysInWeek.map((day) {
               final bool isSelected = DateUtils.isSameDay(_selectedDate, day);
               final bool isToday = DateUtils.isSameDay(DateTime.now(), day);
+              final bool hasTasks = _dateHasTasks(day); // Check if the date has tasks
+
               return Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 2.0),
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: isSelected ? Colors.blue : (isToday ? Colors.blue.shade100 : Colors.white),
-                    foregroundColor: isSelected ? Colors.white : Colors.black,
-                    padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    shape: CircleBorder(),
-                    minimumSize: Size(40, 40),
-                  ).copyWith(elevation: MaterialStateProperty.all(isSelected ? 4 : 1)),
-                  onPressed: () => setState(() {
-                    _selectedDate = day;
-                    _focusedDate = day;
-                  }),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(DateFormat.E().format(day).substring(0,1), style: TextStyle(fontSize: 10)),
-                      Text(DateFormat.d().format(day), style: TextStyle(fontSize: 14, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
-                    ],
-                  ),
+                child: Stack( // Use Stack to overlay the dot
+                  alignment: Alignment.topCenter, // Position dot at the top center
+                  children: [
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: isSelected ? Colors.blue : (isToday ? Colors.blue.shade100 : Colors.white),
+                        foregroundColor: isSelected ? Colors.white : Colors.black,
+                        padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        shape: CircleBorder(),
+                        minimumSize: Size(45, 45), // Slightly larger to accommodate dot
+                      ).copyWith(elevation: MaterialStateProperty.all(isSelected ? 4 : 1)),
+                      onPressed: () => setState(() {
+                        _selectedDate = day;
+                        _focusedDate = day;
+                      }),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(DateFormat.E().format(day).substring(0,1), style: TextStyle(fontSize: 10)),
+                          Text(DateFormat.d().format(day), style: TextStyle(fontSize: 14, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
+                        ],
+                      ),
+                    ),
+                    // Add a dot if the date has tasks
+                    if (hasTasks)
+                      Positioned(
+                        top: 4, // Adjust position as needed
+                        child: Container(
+                          width: 6,
+                          height: 6,
+                          decoration: BoxDecoration(
+                            color: isSelected ? Colors.white : Colors.blue, // Contrast color
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
               );
             }).toList(),
@@ -215,18 +261,59 @@ class todoScreenState extends State<todoScreen> {
     );
   }
 
+  // New widget to build the task list
+  Widget _buildTaskList() {
+    final tasks = _getTasksForSelectedDate();
+
+    if (tasks.isEmpty) {
+      return Center(
+        child: Text(
+          "No tasks for ${DateFormat.yMd().format(_selectedDate)}",
+          style: TextStyle(fontSize: 16, color: Colors.grey),
+        ),
+      );
+    }
+
+    return ListView.builder(
+      itemCount: tasks.length,
+      itemBuilder: (context, index) {
+        final task = tasks[index];
+        return ListTile(
+          leading: Checkbox(
+            value: task.isCompleted,
+            onChanged: (bool? value) {
+              setState(() {
+                task.isCompleted = value ?? false;
+              });
+            },
+          ),
+          title: Text(
+            task.title,
+            style: TextStyle(
+              decoration: task.isCompleted ? TextDecoration.lineThrough : null,
+            ),
+          ),
+          subtitle: Text(task.description),
+          trailing: Text(task.category, style: TextStyle(color: Colors.grey, fontSize: 12)),
+          // Optional: Add onTap to edit task, onLongPress to delete?
+        );
+      },
+    );
+  }
+
   void _showCategoryDialog(BuildContext context) {
     showDialog(
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: Text("To create a new task, please select a category or create a new one."),
+          title: Text("Select or Create Category"),
           content: Container(
             width: double.maxFinite,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                ...categories.map((category) => Padding(
+                // Use tasksByCategory.keys for existing categories
+                ...tasksByCategory.keys.map((category) => Padding(
                   padding: const EdgeInsets.symmetric(vertical: 4.0),
                   child: ElevatedButton(
                     style: ElevatedButton.styleFrom(
@@ -236,12 +323,13 @@ class todoScreenState extends State<todoScreen> {
                     ),
                     onPressed: () {
                       Navigator.of(context).pop();
-                      _showCategoryOptionsDialog(context, category);
+                      // Go directly to add task dialog for the selected category
+                      _showAddTaskDialog(context, category);
                     },
                     child: Text(category),
                   ),
                 )),
-                
+
                 SizedBox(height: 10),
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
@@ -265,7 +353,7 @@ class todoScreenState extends State<todoScreen> {
 
   void _showCreateCategoryDialog(BuildContext context) {
     String newCategory = '';
-    
+
     showDialog(
       context: context,
       builder: (BuildContext context) {
@@ -273,7 +361,7 @@ class todoScreenState extends State<todoScreen> {
           title: Text("Create New Category"),
           content: TextField(
             onChanged: (value) {
-              newCategory = value;
+              newCategory = value.trim(); // Trim whitespace
             },
             decoration: InputDecoration(hintText: "Enter category name"),
           ),
@@ -281,21 +369,32 @@ class todoScreenState extends State<todoScreen> {
             TextButton(
               onPressed: () {
                 Navigator.of(context).pop();
-                _showCategoryDialog(context);
+                // Don't automatically reopen the category dialog
               },
               child: Text("Cancel"),
             ),
             TextButton(
               onPressed: () {
-                if (newCategory.isNotEmpty) {
+                if (newCategory.isNotEmpty && !tasksByCategory.containsKey(newCategory)) {
                   setState(() {
-                    categories.add(newCategory);
+                    tasksByCategory[newCategory] = []; // Add new category with empty task list
                   });
+                  Navigator.of(context).pop();
+                  // After creating, immediately open the add task dialog for the new category
+                  _showAddTaskDialog(context, newCategory);
+                } else if (tasksByCategory.containsKey(newCategory)){
+                    // Optional: Show error if category already exists
+                    ScaffoldMessenger.of(context).showSnackBar(
+                       SnackBar(content: Text('Category "$newCategory" already exists.'), duration: Duration(seconds: 2)),
+                    );
+                } else {
+                   // Optional: Handle empty input
+                   ScaffoldMessenger.of(context).showSnackBar(
+                       SnackBar(content: Text('Category name cannot be empty.'), duration: Duration(seconds: 2)),
+                    );
                 }
-                Navigator.of(context).pop();
-                _showCategoryDialog(context);
               },
-              child: Text("Create"),
+              child: Text("Create & Add Task"), // Changed button text
             ),
           ],
         );
@@ -303,86 +402,102 @@ class todoScreenState extends State<todoScreen> {
     );
   }
 
-  void _showCategoryOptionsDialog(BuildContext context, String category) {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: Text(category),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blue,
-                  foregroundColor: Colors.white,
-                  minimumSize: Size(double.infinity, 50),
-                ),
-                onPressed: () {
-                  Navigator.of(context).pop();
-                  _showAddTaskDialog(context, category);
-                },
-                child: Text("Add Task"),
-              ),
-              
-              SizedBox(height: 10),
-              
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.red,
-                  foregroundColor: Colors.white,
-                  minimumSize: Size(double.infinity, 50),
-                ),
-                onPressed: () {
-                  setState(() {
-                    categories.remove(category);
-                  });
-                  Navigator.of(context).pop();
-                },
-                child: Text("Remove Category"),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
+  // Modify Add Task Dialog to include Title, Description, and Due Date
   void _showAddTaskDialog(BuildContext context, String category) {
-    String newTask = '';
-    
+    final _formKey = GlobalKey<FormState>(); // For validation
+    String taskTitle = '';
+    String taskDescription = '';
+    DateTime? taskDueDate = _selectedDate; // Default to selected date
+
     showDialog(
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
           title: Text("Add Task to $category"),
-          content: TextField(
-            onChanged: (value) {
-              newTask = value;
+          content: StatefulBuilder( // Use StatefulBuilder for the date picker update
+            builder: (BuildContext context, StateSetter setStateDialog) {
+              return SingleChildScrollView( // Prevent overflow
+                child: Form(
+                   key: _formKey,
+                   child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        TextFormField(
+                          decoration: InputDecoration(labelText: "Title"),
+                          validator: (value) => value == null || value.isEmpty ? 'Please enter a title' : null,
+                          onSaved: (value) => taskTitle = value!,
+                        ),
+                        SizedBox(height: 8),
+                        TextFormField(
+                          decoration: InputDecoration(labelText: "Description"),
+                          maxLines: 3, // Allow multi-line description
+                          onSaved: (value) => taskDescription = value ?? '',
+                        ),
+                        SizedBox(height: 16),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text("Due Date: ${DateFormat.yMd().format(taskDueDate!)}"),
+                            TextButton(
+                              child: Text("Select Date"),
+                              onPressed: () async {
+                                final DateTime? picked = await showDatePicker(
+                                  context: context,
+                                  initialDate: taskDueDate!, // Use current task due date
+                                  firstDate: DateTime(2000),
+                                  lastDate: DateTime(2101),
+                                );
+                                if (picked != null && picked != taskDueDate) {
+                                  setStateDialog(() { // Update dialog state
+                                     taskDueDate = picked;
+                                  });
+                                }
+                              },
+                            ),
+                          ],
+                        ),
+                      ],
+                   ),
+                ),
+              );
             },
-            decoration: InputDecoration(hintText: "Enter task description"),
           ),
           actions: [
             TextButton(
               onPressed: () {
                 Navigator.of(context).pop();
-                _showCategoryOptionsDialog(context, category);
               },
               child: Text("Cancel"),
             ),
             TextButton(
               onPressed: () {
-                if (newTask.isNotEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text("Task added to $category: $newTask"),
-                      duration: Duration(seconds: 2),
-                    ),
-                  );
+                if (_formKey.currentState!.validate()) {
+                   _formKey.currentState!.save(); // Save form field values
+
+                   final newTask = Task(
+                      id: _generateUniqueId(),
+                      category: category,
+                      title: taskTitle,
+                      description: taskDescription,
+                      dueDate: taskDueDate!,
+                   );
+
+                   setState(() { // Update main screen state
+                      if (tasksByCategory.containsKey(category)) {
+                        tasksByCategory[category]!.add(newTask);
+                      } else {
+                        // This case should ideally not happen with the current flow
+                        // but good to handle defensively.
+                        tasksByCategory[category] = [newTask];
+                      }
+                   });
+                   Navigator.of(context).pop(); // Close the dialog
+                   ScaffoldMessenger.of(context).showSnackBar(
+                     SnackBar(content: Text('Task "${newTask.title}" added to $category.'), duration: Duration(seconds: 2)),
+                   );
                 }
-                Navigator.of(context).pop();
               },
-              child: Text("Add"),
+              child: Text("Add Task"),
             ),
           ],
         );

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 void main() {
   runApp(NoTitle());
@@ -17,9 +18,18 @@ class todoScreen extends StatefulWidget {
 }
 
 class todoScreenState extends State<todoScreen> {
-  int selectedPage = 1;
-  //empty list to hold the categories that we create when clicking the plus button on the bottom
+  DateTime _selectedDate = DateTime.now();
+  DateTime _focusedDate = DateTime.now();
+
   List<String> categories = [];
+
+  DateTime _getStartOfWeek(DateTime date) {
+    return date.subtract(Duration(days: date.weekday - 1));
+  }
+
+  DateTime _getEndOfWeek(DateTime date) {
+    return date.add(Duration(days: DateTime.daysPerWeek - date.weekday));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -27,6 +37,13 @@ class todoScreenState extends State<todoScreen> {
       appBar: AppBar(
         title: Text("To Do List", style: TextStyle(fontSize: 22)),
         centerTitle: true,
+        actions: [
+          IconButton(
+            icon: Icon(Icons.calendar_today),
+            onPressed: _selectDate,
+            tooltip: 'Select Date',
+          ),
+        ],
       ),
       drawer: Drawer(
         child: ListView(
@@ -118,54 +135,86 @@ class todoScreenState extends State<todoScreen> {
         ],
       ),
       floatingActionButton: FloatingActionButton(
-        //when the button is pressed, it will show the dialog box ( in this case the dialog box is the categories)
         onPressed: () => _showCategoryDialog(context),
         child: Icon(Icons.add, size: 32),
       ),
     );
   }
 
+  Future<void> _selectDate() async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2101),
+    );
+    if (picked != null && picked != _selectedDate) {
+      setState(() {
+        _selectedDate = picked;
+        _focusedDate = picked;
+      });
+    }
+  }
+
   Widget buildPageSelect() {
+    final startOfWeek = _getStartOfWeek(_focusedDate);
+    final daysInWeek = List.generate(7, (index) => startOfWeek.add(Duration(days: index)));
+
     return SingleChildScrollView(
-      scrollDirection: Axis.horizontal, // Page number rowling
+      scrollDirection: Axis.horizontal,
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           IconButton(
             icon: Icon(Icons.arrow_left),
-            onPressed: selectedPage > 1
-                ? () => setState(() => selectedPage--)
-                : null,
+            onPressed: () {
+              setState(() {
+                _focusedDate = _focusedDate.subtract(Duration(days: 7));
+              });
+            },
           ),
           Row(
-            children: List.generate(7, (index) {
-              int page = index + 1;
+            children: daysInWeek.map((day) {
+              final bool isSelected = DateUtils.isSameDay(_selectedDate, day);
+              final bool isToday = DateUtils.isSameDay(DateTime.now(), day);
               return Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                padding: const EdgeInsets.symmetric(horizontal: 2.0),
                 child: ElevatedButton(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor:
-                    selectedPage == page ? Colors.blue : Colors.white,
-                    foregroundColor:
-                    selectedPage == page ? Colors.white : Colors.black,
+                    backgroundColor: isSelected ? Colors.blue : (isToday ? Colors.blue.shade100 : Colors.white),
+                    foregroundColor: isSelected ? Colors.white : Colors.black,
+                    padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    shape: CircleBorder(),
+                    minimumSize: Size(40, 40),
+                  ).copyWith(elevation: MaterialStateProperty.all(isSelected ? 4 : 1)),
+                  onPressed: () => setState(() {
+                    _selectedDate = day;
+                    _focusedDate = day;
+                  }),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(DateFormat.E().format(day).substring(0,1), style: TextStyle(fontSize: 10)),
+                      Text(DateFormat.d().format(day), style: TextStyle(fontSize: 14, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
+                    ],
                   ),
-                  onPressed: () => setState(() => selectedPage = page),
-                  child: Text("$page"),
                 ),
               );
-            }),
+            }).toList(),
           ),
           IconButton(
             icon: Icon(Icons.arrow_right),
-            onPressed: selectedPage < 7
-                ? () => setState(() => selectedPage++)
-                : null,
+            onPressed: () {
+              setState(() {
+                _focusedDate = _focusedDate.add(Duration(days: 7));
+              });
+            },
           ),
         ],
       ),
     );
   }
-// this displays a dialog for selecting existing categories or creating a new one 
+
   void _showCategoryDialog(BuildContext context) {
     showDialog(
       context: context,
@@ -177,12 +226,11 @@ class todoScreenState extends State<todoScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Show existing categories if any
                 ...categories.map((category) => Padding(
                   padding: const EdgeInsets.symmetric(vertical: 4.0),
                   child: ElevatedButton(
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Color(0xFF8D5353), // Brown color 
+                      backgroundColor: Color(0xFF8D5353),
                       foregroundColor: Colors.white,
                       minimumSize: Size(double.infinity, 50),
                     ),
@@ -194,7 +242,6 @@ class todoScreenState extends State<todoScreen> {
                   ),
                 )),
                 
-                // Create New Category button - always shown
                 SizedBox(height: 10),
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
@@ -216,7 +263,6 @@ class todoScreenState extends State<todoScreen> {
     );
   }
 
-// this displays a dialog for example entering a new category name and adding it to the list
   void _showCreateCategoryDialog(BuildContext context) {
     String newCategory = '';
     
@@ -235,7 +281,7 @@ class todoScreenState extends State<todoScreen> {
             TextButton(
               onPressed: () {
                 Navigator.of(context).pop();
-                _showCategoryDialog(context); // Return to main dialog
+                _showCategoryDialog(context);
               },
               child: Text("Cancel"),
             ),
@@ -247,7 +293,7 @@ class todoScreenState extends State<todoScreen> {
                   });
                 }
                 Navigator.of(context).pop();
-                _showCategoryDialog(context); // Return to main dialog
+                _showCategoryDialog(context);
               },
               child: Text("Create"),
             ),
@@ -266,7 +312,6 @@ class todoScreenState extends State<todoScreen> {
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Add Task button
               ElevatedButton(
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.blue,
@@ -282,7 +327,6 @@ class todoScreenState extends State<todoScreen> {
               
               SizedBox(height: 10),
               
-              // Remove Category button
               ElevatedButton(
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.red,
@@ -329,8 +373,6 @@ class todoScreenState extends State<todoScreen> {
             TextButton(
               onPressed: () {
                 if (newTask.isNotEmpty) {
-                  // Here you would add the task to a tasks list
-                  // For now, we'll just show a confirmation
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
                       content: Text("Task added to $category: $newTask"),

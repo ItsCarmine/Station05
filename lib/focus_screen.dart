@@ -19,37 +19,46 @@ class _FocusScreenState extends State<FocusScreen> {
   Timer? _timer;
   int _currentSeconds = 0;
   bool _isTimerRunning = false;
+  int _secondsElapsedThisSession = 0;
 
-  // --- Pomodoro State --- 
-  // TODO: Make these configurable later (e.g., via settings)
-  final int _workDuration = 25 * 60; // 25 minutes in seconds
-  final int _shortBreakDuration = 5 * 60; // 5 minutes
-  final int _longBreakDuration = 15 * 60; // 15 minutes
-  final int _pomodorosBeforeLongBreak = 4; // Number of work cycles before a long break
+  // Editable Durations
+  late TextEditingController _workDurationController;
+  late TextEditingController _breakDurationController;
+  int _workDurationMinutes = 25;
+  int _breakDurationMinutes = 5;
 
-  int _pomodoroCycle = 0; // Number of work sessions completed in the current set
-  PomodoroPhase _currentPhase = PomodoroPhase.work; // Start with a work session
+  // Simple state: are we timing work or break?
+  bool _isWorkPhase = true; 
 
   @override
   void initState() {
     super.initState();
-    _resetPomodoro(); // Initialize timer display based on Pomodoro state
+    // Initialize controllers with default values
+    _workDurationController = TextEditingController(text: _workDurationMinutes.toString());
+    _breakDurationController = TextEditingController(text: _breakDurationMinutes.toString());
+    _resetTimer();
   }
 
   @override
   void dispose() {
     _timer?.cancel();
+    _workDurationController.dispose();
+    _breakDurationController.dispose();
+    // IMPORTANT: Save elapsed time if user backs out while timer was running
+    if (_secondsElapsedThisSession > 0) {
+      _saveFocusTime();
+    }
     super.dispose();
   }
 
-  // Renamed from _resetTimer to be more specific
-  void _resetPomodoro() {
+  void _resetTimer() {
     _timer?.cancel();
     setState(() {
-      _currentPhase = PomodoroPhase.work;
-      _currentSeconds = _workDuration;
+      // Set timer to work duration initially
+      _currentSeconds = _workDurationMinutes * 60;
       _isTimerRunning = false;
-      _pomodoroCycle = 0;
+      _isWorkPhase = true;
+      _secondsElapsedThisSession = 0; // Reset session counter
     });
   }
 
@@ -57,7 +66,9 @@ class _FocusScreenState extends State<FocusScreen> {
     if (_isTimerRunning) {
       _timer?.cancel();
     } else {
-       if (_currentSeconds <= 0) return; // Don't start if already finished
+      // Ensure we have time remaining
+      if (_currentSeconds <= 0) return;
+
       _timer = Timer.periodic(Duration(seconds: 1), (timer) {
         if (_currentSeconds <= 0) {
           timer.cancel();
@@ -65,6 +76,10 @@ class _FocusScreenState extends State<FocusScreen> {
         } else {
           setState(() {
             _currentSeconds--;
+            // Only increment session time if it's a work phase
+            if (_isWorkPhase) {
+                _secondsElapsedThisSession++;
+            }
           });
         }
       });
@@ -74,36 +89,31 @@ class _FocusScreenState extends State<FocusScreen> {
     });
   }
 
-  void _skipPhase() {
+  void _handleTimerCompletion() {
+     // Timer finished, switch phase
      _timer?.cancel();
-     _handleTimerCompletion();
+     setState(() {
+        _isTimerRunning = false;
+        _isWorkPhase = !_isWorkPhase; // Toggle between work and break
+        _currentSeconds = (_isWorkPhase ? _workDurationMinutes : _breakDurationMinutes) * 60;
+     });
+     // Optional: Play a sound notification
   }
 
-  void _handleTimerCompletion() {
-    // Optional: Add sound/notification here
-    // E.g., using audioplayers package: AudioPlayer().play(AssetSource('sounds/alarm.mp3'));
+  // Function to end the session and save time
+  void _endSession() {
+     _timer?.cancel();
+     _saveFocusTime();
+     Navigator.of(context).pop(); // Go back to task list
+  }
 
-    setState(() {
-       _isTimerRunning = false;
-
-      if (_currentPhase == PomodoroPhase.work) {
-        _pomodoroCycle++;
-        if (_pomodoroCycle >= _pomodorosBeforeLongBreak) {
-          // Start Long Break
-          _currentPhase = PomodoroPhase.longBreak;
-          _currentSeconds = _longBreakDuration;
-          _pomodoroCycle = 0; // Reset cycle count after long break
-        } else {
-          // Start Short Break
-          _currentPhase = PomodoroPhase.shortBreak;
-          _currentSeconds = _shortBreakDuration;
-        }
-      } else {
-        // If it was a break (short or long), start next work session
-        _currentPhase = PomodoroPhase.work;
-        _currentSeconds = _workDuration;
-      }
-    });
+  void _saveFocusTime() {
+     if (_secondsElapsedThisSession > 0 && widget.task.isInBox) { // Check if task is still in Hive box
+        widget.task.totalSecondsFocused += _secondsElapsedThisSession;
+        widget.task.save(); // Save updated task to Hive
+        print("Saved ${_secondsElapsedThisSession} seconds to task ${widget.task.title}");
+        _secondsElapsedThisSession = 0; // Reset after saving
+     }
   }
 
   String _formatTime(int totalSeconds) {
@@ -113,134 +123,129 @@ class _FocusScreenState extends State<FocusScreen> {
     return "$minutes:$seconds";
   }
 
-  String _getPhaseName(PomodoroPhase phase) {
-     switch (phase) {
-       case PomodoroPhase.work:
-         return "Work Time";
-       case PomodoroPhase.shortBreak:
-         return "Short Break";
-       case PomodoroPhase.longBreak:
-         return "Long Break";
-     }
-  }
+  // Function to update duration from text field input
+  void _updateDuration(String value, bool isWork) {
+      final minutes = int.tryParse(value);
+      if (minutes != null && minutes > 0) {
+         setState(() {
+            if (isWork) {
+               _workDurationMinutes = minutes;
+            } else {
+               _breakDurationMinutes = minutes;
+            }
+            // If timer isn't running, update the current display
+            if (!_isTimerRunning) {
+               _currentSeconds = (_isWorkPhase == isWork ? minutes : (_isWorkPhase ? _workDurationMinutes : _breakDurationMinutes)) * 60;
+            }
+         });
+      }
+   }
 
-  Color _getPhaseColor(PomodoroPhase phase) {
-     switch (phase) {
-       case PomodoroPhase.work:
-         return Colors.red.shade300;
-       case PomodoroPhase.shortBreak:
-         return Colors.green.shade300;
-       case PomodoroPhase.longBreak:
-         return Colors.blue.shade300;
-     }
-  }
 
   @override
   Widget build(BuildContext context) {
-    // Get phase color for background or elements
-    final phaseColor = _getPhaseColor(_currentPhase);
+    final phaseColor = _isWorkPhase ? Colors.red.shade300 : Colors.green.shade300;
+    final phaseName = _isWorkPhase ? "Work Phase" : "Break Phase";
 
     return Scaffold(
       appBar: AppBar(
-        title: Text("Focus: ${widget.task.title}"), // Add task title to app bar
-        backgroundColor: phaseColor, // Color app bar based on phase
-        leading: IconButton(
+        title: Text("Focus: ${widget.task.title}"),
+        backgroundColor: phaseColor,
+         leading: IconButton(
            icon: Icon(Icons.arrow_back),
-           onPressed: () {
-             // Optional: Show confirmation if timer is running?
-             _timer?.cancel(); // Stop timer when leaving
-             Navigator.of(context).pop();
-           },
+           onPressed: _endSession, // Use end session logic for back button too
         ),
       ),
-      // Optional: Color the whole background?
-      // backgroundColor: phaseColor.withOpacity(0.1),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
-        child: Center(
+        child: SingleChildScrollView( // Allow scrolling if content overflows
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: <Widget>[
-              // Display current phase
+              // Editable Durations
+              Row(
+                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                 children: [
+                    _buildDurationEditor("Work (min)", _workDurationController, true),
+                    _buildDurationEditor("Break (min)", _breakDurationController, false),
+                 ],
+              ),
+              SizedBox(height: 30),
+
+              // Phase Indicator
               Text(
-                 _getPhaseName(_currentPhase),
+                 phaseName,
                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(color: phaseColor),
               ),
               SizedBox(height: 10),
-              // Display current task details (optional reminder)
-              /* Text(
-                widget.task.title,
-                style: Theme.of(context).textTheme.titleLarge,
-                textAlign: TextAlign.center,
-              ), 
-              SizedBox(height: 8), 
-              if (widget.task.description.isNotEmpty)
-                Text(
-                  widget.task.description,
-                  style: Theme.of(context).textTheme.bodyMedium,
-                  textAlign: TextAlign.center,
-                ), */
+
               // Timer Display
               Text(
                 _formatTime(_currentSeconds),
                 style: Theme.of(context).textTheme.displayLarge?.copyWith(
                    fontWeight: FontWeight.bold,
-                   fontSize: 80, // Make timer larger
+                   fontSize: 80,
                    color: phaseColor,
                 ),
               ),
-              SizedBox(height: 8),
-              // Pomodoro Cycle Indicator (e.g., using dots)
-               Row(
-                 mainAxisAlignment: MainAxisAlignment.center,
-                 children: List.generate(_pomodorosBeforeLongBreak, (index) {
-                   return Padding(
-                     padding: const EdgeInsets.symmetric(horizontal: 4.0),
-                     child: Icon(
-                       index < _pomodoroCycle ? Icons.circle : Icons.circle_outlined,
-                       color: phaseColor,
-                       size: 16,
-                     ),
-                   );
-                 }),
-               ),
               SizedBox(height: 30),
-              // Timer Controls
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  ElevatedButton.icon(
-                    icon: Icon(_isTimerRunning ? Icons.pause : Icons.play_arrow),
-                    label: Text(_isTimerRunning ? 'Pause' : 'Start'),
-                    onPressed: _toggleTimer,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: phaseColor,
-                      foregroundColor: Colors.white,
-                      padding: EdgeInsets.symmetric(horizontal: 40, vertical: 15),
-                      textStyle: TextStyle(fontSize: 20),
-                    ),
-                  ),
-                   // Add Reset Button
-                   SizedBox(width: 15),
-                   IconButton(
-                     icon: Icon(Icons.refresh),
-                     onPressed: _resetPomodoro,
-                     tooltip: 'Reset Pomodoro',
-                     color: phaseColor,
-                     iconSize: 30,
-                   ),
-                ],
+
+              // Timer Controls (Start/Pause)
+              ElevatedButton.icon(
+                icon: Icon(_isTimerRunning ? Icons.pause : Icons.play_arrow),
+                label: Text(_isTimerRunning ? 'Pause' : 'Start'),
+                onPressed: _toggleTimer,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: phaseColor,
+                  foregroundColor: Colors.white,
+                  padding: EdgeInsets.symmetric(horizontal: 50, vertical: 15),
+                  textStyle: TextStyle(fontSize: 20),
+                ),
               ),
-               SizedBox(height: 20),
-              // Add Skip Button
-               TextButton(
-                  onPressed: _skipPhase,
-                  child: Text("Skip Phase", style: TextStyle(color: phaseColor)),
-                )
+              SizedBox(height: 40),
+
+              // End Session Button
+              OutlinedButton.icon(
+                 icon: Icon(Icons.stop_circle_outlined),
+                 label: Text("End Focus Session"),
+                 onPressed: _endSession,
+                 style: OutlinedButton.styleFrom(
+                   foregroundColor: Colors.grey[700],
+                   side: BorderSide(color: Colors.grey.shade400),
+                   padding: EdgeInsets.symmetric(horizontal: 30, vertical: 10),
+                 ),
+              )
             ],
           ),
         ),
       ),
     );
   }
+
+  // Helper Widget for Duration Editor
+   Widget _buildDurationEditor(String label, TextEditingController controller, bool isWork) {
+      return Column(
+         children: [
+            Text(label, style: TextStyle(fontSize: 16)),
+            SizedBox(height: 4),
+            SizedBox(
+               width: 80,
+               child: TextField(
+                  controller: controller,
+                  textAlign: TextAlign.center,
+                  keyboardType: TextInputType.number,
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  decoration: InputDecoration(
+                     contentPadding: EdgeInsets.symmetric(vertical: 8),
+                     border: OutlineInputBorder(),
+                     isDense: true,
+                  ),
+                  onChanged: (value) => _updateDuration(value, isWork),
+                  // Prevent editing while timer is running?
+                  // enabled: !_isTimerRunning, 
+               ),
+            ),
+         ],
+      );
+   }
 } 

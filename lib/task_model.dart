@@ -23,6 +23,9 @@ class Task extends HiveObject {
   @HiveField(5)
   bool isCompleted;
 
+  @HiveField(6)
+  int totalSecondsFocused;
+
   Task({
     required this.id,
     required this.category,
@@ -30,5 +33,6 @@ class Task extends HiveObject {
     required this.description,
     required this.dueDate,
     this.isCompleted = false,
+    this.totalSecondsFocused = 0,
   });
 } 

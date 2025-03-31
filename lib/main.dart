@@ -18,10 +18,17 @@ Future<void> main() async { // Make main async
   final appDocumentDir = await getApplicationDocumentsDirectory();
   await Hive.initFlutter(appDocumentDir.path);
 
+  // --- START FIX: Delete old boxes before opening ---
+  // Warning: This deletes existing data!
+  await Hive.deleteBoxFromDisk(taskBoxName);
+  await Hive.deleteBoxFromDisk(categoryBoxName);
+  print("Cleared old Hive boxes (taskBoxName, categoryBoxName) for compatibility.");
+  // --- END FIX ---
+
   // Register Adapter
   Hive.registerAdapter(TaskAdapter());
 
-  // Open boxes
+  // Open boxes (now guaranteed to be empty or compatible)
   await Hive.openBox<Task>(taskBoxName);
   await Hive.openBox<String>(categoryBoxName); // Box to store category names
 

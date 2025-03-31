@@ -2,8 +2,29 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'task_model.dart'; // Import the new Task model
 import 'dart:math'; // For generating random IDs
+import 'package:hive_flutter/hive_flutter.dart'; // Import Hive Flutter
+import 'package:path_provider/path_provider.dart'; // Import Path Provider
+import 'focus_screen.dart'; // Import the FocusScreen
+import 'statistics_screen.dart'; // Import the StatisticsScreen
 
-void main() {
+// Define box names
+const String taskBoxName = 'tasks';
+const String categoryBoxName = 'categories';
+
+Future<void> main() async { // Make main async
+  WidgetsFlutterBinding.ensureInitialized(); // Ensure bindings are initialized
+
+  // Initialize Hive
+  final appDocumentDir = await getApplicationDocumentsDirectory();
+  await Hive.initFlutter(appDocumentDir.path);
+
+  // Register Adapter
+  Hive.registerAdapter(TaskAdapter());
+
+  // Open boxes
+  await Hive.openBox<Task>(taskBoxName);
+  await Hive.openBox<String>(categoryBoxName); // Box to store category names
+
   runApp(NoTitle());
 }
 
@@ -23,9 +44,49 @@ class todoScreenState extends State<todoScreen> {
   DateTime _selectedDate = DateTime.now();
   DateTime _focusedDate = DateTime.now();
 
-  // Replace categories list with a map to store tasks per category
-  // List<String> categories = [];
+  // Get Hive boxes
+  late Box<Task> taskBox;
+  late Box<String> categoryBox;
+
+  // Keep the map for easy access in UI, but populate from Hive
   Map<String, List<Task>> tasksByCategory = {};
+
+  @override
+  void initState() {
+    super.initState();
+    taskBox = Hive.box<Task>(taskBoxName);
+    categoryBox = Hive.box<String>(categoryBoxName);
+    _loadTasksAndCategories();
+  }
+
+  void _loadTasksAndCategories() {
+    // Clear existing map
+    tasksByCategory.clear();
+
+    // Load categories
+    List<String> categories = categoryBox.values.toList();
+
+    // Load tasks and group them by category
+    final allTasks = taskBox.values.toList();
+
+    for (String category in categories) {
+      tasksByCategory[category] = allTasks.where((task) => task.category == category).toList();
+    }
+    // Ensure all categories from tasks are present, even if the category name wasn't explicitly saved
+    // (This handles potential data inconsistency if categoryBox wasn't updated)
+    for (Task task in allTasks) {
+        if (!tasksByCategory.containsKey(task.category)) {
+            tasksByCategory[task.category] = [task];
+            // Optionally, add the missing category name to categoryBox here if desired
+            // if (!categoryBox.values.contains(task.category)) { 
+            //    categoryBox.add(task.category);
+            // } 
+        }
+    }
+
+    // Trigger a rebuild if needed after loading
+    setState(() {}); 
+  }
 
   // Helper to generate unique IDs for tasks
   String _generateUniqueId() {
@@ -112,13 +173,20 @@ class todoScreenState extends State<todoScreen> {
               leading: Icon(Icons.bar_chart),
               title: Text('Statistics'),
               onTap: () {
-                Navigator.pop(context);
+                Navigator.pop(context); // Close the drawer first
+                // Navigate to the Statistics Screen
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const StatisticsScreen()),
+                );
+                /* Old SnackBar code:
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
                     content: Text("Statistics coming soon!"),
                     duration: Duration(seconds: 2),
                   ),
                 );
+                */
               },
             ),
             ListTile(
@@ -282,9 +350,7 @@ class todoScreenState extends State<todoScreen> {
           leading: Checkbox(
             value: task.isCompleted,
             onChanged: (bool? value) {
-              setState(() {
-                task.isCompleted = value ?? false;
-              });
+              _updateTaskCompletion(task, value ?? false);
             },
           ),
           title: Text(
@@ -294,8 +360,67 @@ class todoScreenState extends State<todoScreen> {
             ),
           ),
           subtitle: Text(task.description),
-          trailing: Text(task.category, style: TextStyle(color: Colors.grey, fontSize: 12)),
-          // Optional: Add onTap to edit task, onLongPress to delete?
+          trailing: Row(
+             mainAxisSize: MainAxisSize.min,
+             children: [
+                Text(task.category, style: TextStyle(color: Colors.grey, fontSize: 12)),
+                SizedBox(width: 4), // Reduced spacing a bit
+                // --- Updated Focus Button ---
+                Material(
+                   type: MaterialType.transparency, // Avoid double background
+                   child: InkWell(
+                      borderRadius: BorderRadius.circular(20), // Makes the splash circular
+                      onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                               builder: (context) => FocusScreen(task: task),
+                            ),
+                          );
+                       },
+                       child: Padding(
+                         padding: const EdgeInsets.all(8.0), // Increase tap area
+                         child: Icon(
+                           Icons.center_focus_strong,
+                           size: 24, // Slightly larger icon
+                           color: Colors.blueAccent,
+                         ),
+                       ),
+                    ),
+                ),
+                // --- End Updated Focus Button ---
+             ]
+          ),
+          onTap: () { // Keep onTap for potential editing in the future
+            // Currently navigates via the IconButton, but could open an edit view here
+            print("Tapped task: ${task.title}");
+          },
+          // Add onLongPress for deletion (example)
+           onLongPress: () { 
+              // Example: Show confirmation dialog before deleting
+              showDialog(
+                  context: context,
+                  builder: (BuildContext ctx) {
+                     return AlertDialog(
+                        title: Text('Delete Task'),
+                        content: Text('Are you sure you want to delete "${task.title}"?'),
+                        actions: [
+                           TextButton(
+                              onPressed: () => Navigator.of(ctx).pop(),
+                              child: Text('Cancel'),
+                           ),
+                           TextButton(
+                              onPressed: () {
+                                 _deleteTask(task);
+                                 Navigator.of(ctx).pop();
+                              },
+                              child: Text('Delete', style: TextStyle(color: Colors.red)),
+                           ),
+                        ],
+                     );
+                  },
+              );
+           },
         );
       },
     );
@@ -375,26 +500,26 @@ class todoScreenState extends State<todoScreen> {
             ),
             TextButton(
               onPressed: () {
-                if (newCategory.isNotEmpty && !tasksByCategory.containsKey(newCategory)) {
+                if (newCategory.isNotEmpty && !categoryBox.values.contains(newCategory)) { // Check categoryBox
+                  // Add to Hive first
+                  categoryBox.add(newCategory);
+                  // Update local state map
                   setState(() {
-                    tasksByCategory[newCategory] = []; // Add new category with empty task list
+                    tasksByCategory[newCategory] = [];
                   });
                   Navigator.of(context).pop();
-                  // After creating, immediately open the add task dialog for the new category
                   _showAddTaskDialog(context, newCategory);
-                } else if (tasksByCategory.containsKey(newCategory)){
-                    // Optional: Show error if category already exists
+                } else if (categoryBox.values.contains(newCategory)){
                     ScaffoldMessenger.of(context).showSnackBar(
                        SnackBar(content: Text('Category "$newCategory" already exists.'), duration: Duration(seconds: 2)),
                     );
                 } else {
-                   // Optional: Handle empty input
                    ScaffoldMessenger.of(context).showSnackBar(
                        SnackBar(content: Text('Category name cannot be empty.'), duration: Duration(seconds: 2)),
                     );
                 }
               },
-              child: Text("Create & Add Task"), // Changed button text
+              child: Text("Create & Add Task"),
             ),
           ],
         );
@@ -472,26 +597,33 @@ class todoScreenState extends State<todoScreen> {
             TextButton(
               onPressed: () {
                 if (_formKey.currentState!.validate()) {
-                   _formKey.currentState!.save(); // Save form field values
+                   _formKey.currentState!.save();
 
                    final newTask = Task(
-                      id: _generateUniqueId(),
+                      id: _generateUniqueId(), // Hive uses its own keys, but ID might still be useful
                       category: category,
                       title: taskTitle,
                       description: taskDescription,
                       dueDate: taskDueDate!,
                    );
 
-                   setState(() { // Update main screen state
+                   // Add to Hive first
+                   taskBox.add(newTask); 
+
+                   // Update local state map
+                   setState(() {
+                      // Ensure the category list exists before adding
                       if (tasksByCategory.containsKey(category)) {
                         tasksByCategory[category]!.add(newTask);
                       } else {
-                        // This case should ideally not happen with the current flow
-                        // but good to handle defensively.
                         tasksByCategory[category] = [newTask];
+                        // Also add category name to categoryBox if it wasn't there
+                        if(!categoryBox.values.contains(category)) {
+                           categoryBox.add(category);
+                        }
                       }
                    });
-                   Navigator.of(context).pop(); // Close the dialog
+                   Navigator.of(context).pop();
                    ScaffoldMessenger.of(context).showSnackBar(
                      SnackBar(content: Text('Task "${newTask.title}" added to $category.'), duration: Duration(seconds: 2)),
                    );
@@ -503,5 +635,43 @@ class todoScreenState extends State<todoScreen> {
         );
       },
     );
+  }
+
+  // Update task completion status in Hive
+  void _updateTaskCompletion(Task task, bool isCompleted) {
+    task.isCompleted = isCompleted;
+    task.save(); // Save the updated task object to Hive
+    setState(() {}); // Rebuild UI to reflect changes
+  }
+
+  // Optional: Add delete task functionality
+  void _deleteTask(Task task) {
+     // Remove from local map
+     tasksByCategory[task.category]?.removeWhere((t) => t.id == task.id);
+     // If category becomes empty, remove it (optional)
+     if (tasksByCategory[task.category]?.isEmpty ?? false) {
+         tasksByCategory.remove(task.category);
+         // Also remove from categoryBox
+         categoryBox.deleteAt(categoryBox.values.toList().indexOf(task.category));
+     }
+     // Remove from Hive box
+     task.delete(); 
+     setState(() {}); // Update UI
+  }
+
+  // Optional: Add delete category functionality
+  void _deleteCategory(String category) {
+      // Get tasks in the category
+      List<Task> tasksToDelete = taskBox.values.where((task) => task.category == category).toList();
+      // Delete tasks from taskBox
+      for (var task in tasksToDelete) {
+          task.delete();
+      }
+      // Delete category name from categoryBox
+      categoryBox.deleteAt(categoryBox.values.toList().indexOf(category));
+      // Update local state
+      setState(() {
+          tasksByCategory.remove(category);
+      });
   }
 }

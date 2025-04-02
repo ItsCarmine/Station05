@@ -14,3 +14,14 @@ A few resources to get you started if this is your first Flutter project:
 For help getting started with Flutter development, view the
 [online documentation](https://docs.flutter.dev/), which offers tutorials,
 samples, guidance on mobile development, and a full API reference.
+
+## Helpful Debugging Commands (for Windows: cmd)
+
+> flutter channel stable
+> flutter upgrade --force 
+> flutter flutter pub cache repair
+> flutter clean
+
+Then try re-starting your project if things weren't working before.
+
+**NOTE:** Your 'Java_Home' might be in '../jbr' instead of '../jre'

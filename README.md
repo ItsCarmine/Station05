@@ -17,11 +17,13 @@ samples, guidance on mobile development, and a full API reference.
 
 ## Helpful Debugging Commands (for Windows: cmd)
 
-> flutter channel stable
-> flutter upgrade --force 
-> flutter flutter pub cache repair
-> flutter clean
+If console shows outdated packages:
 
-Then try re-starting your project if things weren't working before.
+> flutter channel stable    
+> flutter upgrade --force     
+> flutter flutter pub cache repair     
+> flutter clean     
 
-**NOTE:** Your 'Java_Home' might be in '../jbr' instead of '../jre'
+Then try re-starting your project.
+
+**NOTE:** Your 'Java_Home' might be in '../jbr' instead of '../jre'. Do set your ENV variables appropriately.

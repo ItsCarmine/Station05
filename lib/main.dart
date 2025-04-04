@@ -35,6 +35,12 @@ Future<void> main() async { // Make main async
   runApp(NoTitle());
 }
 
+// --- Move helper function outside class if it doesn't depend on instance state ---
+// Helper to generate unique IDs for tasks (doesn't need instance state)
+String _generateUniqueId() {
+  return DateTime.now().millisecondsSinceEpoch.toString() + Random().nextInt(1000).toString();
+}
+
 class NoTitle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
@@ -95,25 +101,21 @@ class todoScreenState extends State<todoScreen> {
     setState(() {}); 
   }
 
-  // Helper to generate unique IDs for tasks
-  String _generateUniqueId() {
-    return DateTime.now().millisecondsSinceEpoch.toString() + Random().nextInt(1000).toString();
-  }
-
-  // Helper to get tasks for the selected date
+  // Get tasks for the currently selected date
   List<Task> _getTasksForSelectedDate() {
-    List<Task> tasks = [];
-    tasksByCategory.values.forEach((taskList) {
-      tasks.addAll(taskList.where((task) => DateUtils.isSameDay(task.dueDate, _selectedDate)));
-    });
-    // Sort tasks, e.g., by completion status or title
-    tasks.sort((a, b) {
-      if (a.isCompleted != b.isCompleted) {
-        return a.isCompleted ? 1 : -1; // Uncompleted tasks first
+    return taskBox.values.where((task) {
+      final selectedDay = _selectedDate;
+
+      if (task.isRecurring) {
+        // Show if it's due today OR if it was completed today
+        final isDueToday = DateUtils.isSameDay(task.dueDate, selectedDay);
+        final wasCompletedToday = task.completionDates.any((completedDate) => DateUtils.isSameDay(completedDate, selectedDay));
+        return isDueToday || wasCompletedToday;
+      } else {
+        // Show non-recurring task if its due date is the selected date
+        return DateUtils.isSameDay(task.dueDate, selectedDay);
       }
-      return a.title.compareTo(b.title);
-    });
-    return tasks;
+    }).toList();
   }
 
   // Helper to check if a date has any tasks
@@ -294,7 +296,7 @@ class todoScreenState extends State<todoScreen> {
     );
   }
 
-  // New widget to build the task list
+  // Build the list of tasks for the selected date
   Widget _buildTaskList() {
     final tasks = _getTasksForSelectedDate();
 
@@ -311,30 +313,53 @@ class todoScreenState extends State<todoScreen> {
       itemCount: tasks.length,
       itemBuilder: (context, index) {
         final task = tasks[index];
+        // Determine if this task instance (for the selected date) is completed
+        final bool isInstanceCompleted;
+        if (task.isRecurring) {
+          isInstanceCompleted = task.completionDates.any((date) => DateUtils.isSameDay(date, _selectedDate));
+        } else {
+          isInstanceCompleted = task.isCompleted;
+        }
+
         return ListTile(
           leading: Checkbox(
-            value: task.isCompleted,
+            value: isInstanceCompleted, // Use instance completion status
             onChanged: (bool? value) {
-              _updateTaskCompletion(task, value ?? false);
+              // Only allow checking if it's the actual due date or already completed today
+              // Prevents checking off future recurring instances shown historically
+              if (DateUtils.isSameDay(task.dueDate, _selectedDate) || isInstanceCompleted) {
+                   _updateTaskCompletion(task, value ?? false);
+              }
             },
           ),
-          title: Text(
-            task.title,
-            style: TextStyle(
-              decoration: task.isCompleted ? TextDecoration.lineThrough : null,
-            ),
+          title: Row(
+            children: [
+              Flexible(
+                child: Text(
+                  task.title,
+                  style: TextStyle(
+                    // Apply strikethrough based on instance completion
+                    decoration: isInstanceCompleted ? TextDecoration.lineThrough : null,
+                  ),
+                ),
+              ),
+              if (task.isRecurring)
+                Padding(
+                  padding: const EdgeInsets.only(left: 8.0),
+                  child: Icon(Icons.repeat, size: 16, color: Colors.grey),
+                ),
+            ],
           ),
           subtitle: Text(task.description),
           trailing: Row(
              mainAxisSize: MainAxisSize.min,
              children: [
                 Text(task.category, style: TextStyle(color: Colors.grey, fontSize: 12)),
-                SizedBox(width: 4), // Reduced spacing a bit
-                // --- Updated Focus Button ---
+                SizedBox(width: 4),
                 Material(
-                   type: MaterialType.transparency, // Avoid double background
+                   type: MaterialType.transparency,
                    child: InkWell(
-                      borderRadius: BorderRadius.circular(20), // Makes the splash circular
+                      borderRadius: BorderRadius.circular(20),
                       onTap: () {
                           Navigator.push(
                             context,
@@ -344,25 +369,21 @@ class todoScreenState extends State<todoScreen> {
                           );
                        },
                        child: Padding(
-                         padding: const EdgeInsets.all(8.0), // Increase tap area
+                         padding: const EdgeInsets.all(8.0),
                          child: Icon(
                            Icons.center_focus_strong,
-                           size: 24, // Slightly larger icon
+                           size: 24,
                            color: Colors.blueAccent,
                          ),
                        ),
                     ),
                 ),
-                // --- End Updated Focus Button ---
              ]
           ),
-          onTap: () { // Keep onTap for potential editing in the future
-            // Currently navigates via the IconButton, but could open an edit view here
+          onTap: () {
             print("Tapped task: ${task.title}");
           },
-          // Add onLongPress for deletion (example)
-           onLongPress: () { 
-              // Example: Show confirmation dialog before deleting
+           onLongPress: () {
               showDialog(
                   context: context,
                   builder: (BuildContext ctx) {
@@ -492,110 +513,43 @@ class todoScreenState extends State<todoScreen> {
     );
   }
 
-  // Modify Add Task Dialog to include Title, Description, and Due Date
+  // Helper method to show the add task dialog
   void _showAddTaskDialog(BuildContext context, String category) {
-    final _formKey = GlobalKey<FormState>(); // For validation
-    String taskTitle = '';
-    String taskDescription = '';
-    DateTime? taskDueDate = _selectedDate; // Default to selected date
-
     showDialog(
       context: context,
       builder: (BuildContext context) {
+        // Pass category and initial date to the stateful dialog content
         return AlertDialog(
-          title: Text("Add Task to $category"),
-          content: StatefulBuilder( // Use StatefulBuilder for the date picker update
-            builder: (BuildContext context, StateSetter setStateDialog) {
-              return SingleChildScrollView( // Prevent overflow
-                child: Form(
-                   key: _formKey,
-                   child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        TextFormField(
-                          decoration: InputDecoration(labelText: "Title"),
-                          validator: (value) => value == null || value.isEmpty ? 'Please enter a title' : null,
-                          onSaved: (value) => taskTitle = value!,
-                        ),
-                        SizedBox(height: 8),
-                        TextFormField(
-                          decoration: InputDecoration(labelText: "Description"),
-                          maxLines: 3, // Allow multi-line description
-                          onSaved: (value) => taskDescription = value ?? '',
-                        ),
-                        SizedBox(height: 16),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text("Due Date: ${DateFormat.yMd().format(taskDueDate!)}"),
-                            TextButton(
-                              child: Text("Select Date"),
-                              onPressed: () async {
-                                final DateTime? picked = await showDatePicker(
-                                  context: context,
-                                  initialDate: taskDueDate!, // Use current task due date
-                                  firstDate: DateTime(2000),
-                                  lastDate: DateTime(2101),
-                                );
-                                if (picked != null && picked != taskDueDate) {
-                                  setStateDialog(() { // Update dialog state
-                                     taskDueDate = picked;
-                                  });
-                                }
-                              },
-                            ),
-                          ],
-                        ),
-                      ],
-                   ),
-                ),
-              );
+          title: Text("Add New Task to $category"),
+          // Use a dedicated StatefulWidget for the content and state management
+          content: _AddTaskDialogContent(
+            category: category,
+            initialDueDate: _selectedDate,
+            onTaskAdded: (newTask) {
+               // Callback when task is successfully added
+               taskBox.add(newTask);
+               setState(() {
+                 if (tasksByCategory.containsKey(category)) {
+                   tasksByCategory[category]!.add(newTask);
+                 } else {
+                   tasksByCategory[category] = [newTask];
+                   if(!categoryBox.values.contains(category)) {
+                     categoryBox.add(category);
+                   }
+                 }
+               });
+               Navigator.of(context).pop(); // Close dialog on success
+               ScaffoldMessenger.of(context).showSnackBar(
+                 SnackBar(content: Text('Task "${newTask.title}" added to $category.'), duration: Duration(seconds: 2)),
+               );
             },
           ),
           actions: [
             TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
+              onPressed: () => Navigator.of(context).pop(),
               child: Text("Cancel"),
             ),
-            TextButton(
-              onPressed: () {
-                if (_formKey.currentState!.validate()) {
-                   _formKey.currentState!.save();
-
-                   final newTask = Task(
-                      id: _generateUniqueId(), // Hive uses its own keys, but ID might still be useful
-                      category: category,
-                      title: taskTitle,
-                      description: taskDescription,
-                      dueDate: taskDueDate!,
-                   );
-
-                   // Add to Hive first
-                   taskBox.add(newTask); 
-
-                   // Update local state map
-                   setState(() {
-                      // Ensure the category list exists before adding
-                      if (tasksByCategory.containsKey(category)) {
-                        tasksByCategory[category]!.add(newTask);
-                      } else {
-                        tasksByCategory[category] = [newTask];
-                        // Also add category name to categoryBox if it wasn't there
-                        if(!categoryBox.values.contains(category)) {
-                           categoryBox.add(category);
-                        }
-                      }
-                   });
-                   Navigator.of(context).pop();
-                   ScaffoldMessenger.of(context).showSnackBar(
-                     SnackBar(content: Text('Task "${newTask.title}" added to $category.'), duration: Duration(seconds: 2)),
-                   );
-                }
-              },
-              child: Text("Add Task"),
-            ),
+            // The "Add Task" button logic is now inside _AddTaskDialogContent
           ],
         );
       },
@@ -603,10 +557,51 @@ class todoScreenState extends State<todoScreen> {
   }
 
   // Update task completion status in Hive
-  void _updateTaskCompletion(Task task, bool isCompleted) {
-    task.isCompleted = isCompleted;
+  void _updateTaskCompletion(Task task, bool isChecked) {
+    // Get the date the checkbox is being interacted with (relevant for historical view)
+    final DateTime interactionDate = _selectedDate; // Use the currently viewed date
+
+    if (task.isRecurring) {
+      if (isChecked) {
+        // --- Mark recurring task complete for this date ---
+        // Only add if not already marked complete for this specific date
+        if (!task.completionDates.any((date) => DateUtils.isSameDay(date, interactionDate))) {
+          // Ensure the date being added matches the *expected* due date for this completion
+          // This prevents marking complete far in the future/past accidentally
+          // We'll assume for now the interactionDate IS the correct due date being completed.
+          task.completionDates.add(interactionDate);
+
+          // Calculate next actual due date based on the date just completed
+          DateTime nextDueDate = interactionDate; // Start from the date just completed
+          if (task.recurrenceType == 'daily') {
+            nextDueDate = nextDueDate.add(Duration(days: task.recurrenceInterval));
+          } else if (task.recurrenceType == 'weekly') {
+            nextDueDate = nextDueDate.add(Duration(days: 7 * task.recurrenceInterval));
+          }
+          task.dueDate = nextDueDate; // Update to the next occurrence
+          task.isCompleted = false; // The task overall is not "done", just this instance
+        }
+      } else {
+        // --- Un-checking a recurring task instance ---
+        // Remove the specific date from completionDates
+        task.completionDates.removeWhere((date) => DateUtils.isSameDay(date, interactionDate));
+        // Potentially reset the main dueDate if the uncompleted date was the *latest* one?
+        // For now, let's keep it simple: just remove the completion record.
+        // The main dueDate still points to the next scheduled occurrence.
+      }
+    } else {
+      // --- Non-recurring task --- 
+      task.isCompleted = isChecked;
+    }
+
     task.save(); // Save the updated task object to Hive
-    setState(() {}); // Rebuild UI to reflect changes
+
+    // Schedule setState after the frame build is complete
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) { // Check if the widget is still mounted
+        setState(() {});
+      }
+    });
   }
 
   // Optional: Add delete task functionality
@@ -638,5 +633,199 @@ class todoScreenState extends State<todoScreen> {
       setState(() {
           tasksByCategory.remove(category);
       });
+  }
+}
+
+// ---------- Add Task Dialog Widgets (Moved Outside) ----------
+
+// Internal StatefulWidget for Add Task Dialog Content
+class _AddTaskDialogContent extends StatefulWidget {
+  final String category;
+  final DateTime initialDueDate;
+  final Function(Task) onTaskAdded; // Callback to add task
+
+  const _AddTaskDialogContent({
+    Key? key,
+    required this.category,
+    required this.initialDueDate,
+    required this.onTaskAdded,
+  }) : super(key: key); // Correct super call
+
+  @override
+  _AddTaskDialogContentState createState() => _AddTaskDialogContentState();
+}
+
+class _AddTaskDialogContentState extends State<_AddTaskDialogContent> {
+  final _formKey = GlobalKey<FormState>();
+  String taskTitle = '';
+  String taskDescription = '';
+  late DateTime taskDueDate;
+
+  // State for Recurrence
+  bool isRecurring = false;
+  String recurrenceType = 'daily';
+  int recurrenceInterval = 1;
+  late TextEditingController _intervalController;
+
+  @override
+  void initState() {
+    super.initState();
+    taskDueDate = widget.initialDueDate; // Access widget property here
+    _intervalController = TextEditingController(text: '1');
+  }
+
+  @override
+  void dispose() {
+    _intervalController.dispose(); // Dispose controller correctly
+    super.dispose();
+  }
+
+  void _addTask() {
+    if (_formKey.currentState!.validate()) {
+      _formKey.currentState!.save();
+
+      final newTask = Task(
+        id: _generateUniqueId(), // Use the top-level function
+        category: widget.category,
+        title: taskTitle,
+        description: taskDescription,
+        dueDate: taskDueDate,
+        isRecurring: isRecurring,
+        recurrenceType: isRecurring ? recurrenceType : 'none',
+        recurrenceInterval: isRecurring ? recurrenceInterval : 1,
+        completionDates: [],
+      );
+
+      widget.onTaskAdded(newTask); // Use the callback via widget property
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // ... (build method for the dialog content remains largely the same) ...
+    // Make sure all calls to setState are just setState(), not setStateDialog()
+    // Ensure all references like widget.category work as expected.
+    return Form(
+      key: _formKey,
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            TextFormField(
+              decoration: InputDecoration(labelText: 'Task Title'),
+              validator: (value) => value == null || value.isEmpty ? 'Please enter a title' : null,
+              onSaved: (value) => taskTitle = value!,
+            ),
+            SizedBox(height: 8),
+            TextFormField(
+              decoration: InputDecoration(labelText: 'Description'),
+              onSaved: (value) => taskDescription = value ?? '',
+            ),
+            SizedBox(height: 8),
+            // Due Date Picker
+            Row(
+              children: [
+                Expanded(
+                  child: Text("Due: ${DateFormat.yMd().format(taskDueDate)}"),
+                ),
+                IconButton(
+                  icon: Icon(Icons.calendar_today),
+                  tooltip: 'Select Due Date',
+                  onPressed: () async {
+                    final DateTime? picked = await showDatePicker(
+                      context: context,
+                      initialDate: taskDueDate,
+                      firstDate: DateTime(2000),
+                      lastDate: DateTime(2101),
+                    );
+                    if (picked != null && picked != taskDueDate) {
+                      setState(() { // Use standard setState
+                         taskDueDate = picked;
+                      });
+                    }
+                  },
+                ),
+              ],
+            ),
+            Divider(height: 16),
+            // Recurrence Settings
+            CheckboxListTile(
+              title: Text("Make this task recurring?"),
+              value: isRecurring,
+              onChanged: (bool? value) {
+                setState(() { // Use standard setState
+                  isRecurring = value ?? false;
+                });
+              },
+              controlAffinity: ListTileControlAffinity.leading,
+              contentPadding: EdgeInsets.zero,
+            ),
+            if (isRecurring)
+              Padding(
+                padding: const EdgeInsets.only(top: 8.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    DropdownButton<String>(
+                      value: recurrenceType,
+                      items: <String>['daily', 'weekly']
+                          .map<DropdownMenuItem<String>>((String value) {
+                        return DropdownMenuItem<String>(
+                          value: value,
+                          child: Text(value == 'daily' ? 'Daily' : 'Weekly'),
+                        );
+                      }).toList(),
+                      onChanged: (String? newValue) {
+                        setState(() { // Use standard setState
+                          recurrenceType = newValue!;
+                        });
+                      },
+                      isExpanded: true,
+                    ),
+                    SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Text("Every "),
+                        SizedBox(
+                          width: 50,
+                          child: TextFormField(
+                            controller: _intervalController,
+                            keyboardType: TextInputType.number,
+                            textAlign: TextAlign.center,
+                            decoration: InputDecoration(
+                              isDense: true,
+                              contentPadding: EdgeInsets.symmetric(vertical: 8),
+                            ),
+                            validator: (value) {
+                              if (value == null || value.isEmpty) return 'Inv.';
+                              final n = int.tryParse(value);
+                              if (n == null || n < 1) return 'Inv.';
+                              return null;
+                            },
+                            onSaved: (value) => recurrenceInterval = int.parse(value!),
+                            onChanged: (value) {
+                               final n = int.tryParse(value);
+                               if (n != null && n > 0) {
+                                  // No setState needed here if UI doesn't depend live
+                                  recurrenceInterval = n;
+                               }
+                            },
+                          ),
+                        ),
+                        Text(recurrenceType == 'daily' ? " days" : " weeks"),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+             SizedBox(height: 20),
+             ElevatedButton(
+                 onPressed: _addTask, // Call the internal add task method
+                 child: Text("Add Task"),
+             )
+          ],
+        ),
+      ),
+    );
   }
 }

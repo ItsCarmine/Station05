@@ -147,28 +147,7 @@ class todoScreenState extends State<todoScreen> {
         child: ListView(
           padding: EdgeInsets.zero,
           children: [
-            DrawerHeader(
-              decoration: BoxDecoration(
-                color: Colors.blue,
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  CircleAvatar(
-                    radius: 30,
-                    child: Icon(Icons.person, size: 40),
-                  ),
-                  SizedBox(height: 10),
-                  Text(
-                    'User Profile',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 24,
-                    ),
-                  ),
-                ],
-              ),
-            ),
+            SizedBox(height: 20.0),
             ListTile(
               leading: Icon(Icons.list),
               title: Text('To Do List'),
@@ -185,27 +164,6 @@ class todoScreenState extends State<todoScreen> {
                 Navigator.push(
                   context,
                   MaterialPageRoute(builder: (context) => const StatisticsScreen()),
-                );
-                /* Old SnackBar code:
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text("Statistics coming soon!"),
-                    duration: Duration(seconds: 2),
-                  ),
-                );
-                */
-              },
-            ),
-            ListTile(
-              leading: Icon(Icons.account_circle),
-              title: Text('Profile'),
-              onTap: () {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text("Profile coming soon!"),
-                    duration: Duration(seconds: 2),
-                  ),
                 );
               },
             ),

@@ -133,7 +133,17 @@ class todoScreenState extends State<todoScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text("To Do List", style: TextStyle(fontSize: 22)),
+        title: Column(
+          children: [
+            Text("To Do List", style: TextStyle(fontSize: 22)),
+            //shows the date which you are in so if u do go to may 10 for example and currently it is april 7 then when u select the date the date u choose will be shown below the todo list so u 
+            //know which day you are on
+            Text(
+              DateFormat('MMM d, yyyy').format(_selectedDate),
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.normal),
+            ),
+          ],
+        ),
         centerTitle: true,
         actions: [
           IconButton(

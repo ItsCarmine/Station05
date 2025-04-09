@@ -6,10 +6,70 @@ import 'package:hive_flutter/hive_flutter.dart'; // Import Hive Flutter
 import 'package:path_provider/path_provider.dart'; // Import Path Provider
 import 'focus_screen.dart'; // Import the FocusScreen
 import 'statistics_screen.dart'; // Import the StatisticsScreen
+import 'splash_screen.dart';
+import 'duo_character.dart';
 
 // Define box names
 const String taskBoxName = 'tasks';
 const String categoryBoxName = 'categories';
+
+
+class NoTitle extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: true,
+      home: SplashToAppWrapper(), // Changed from direct todoScreen
+    );
+  }
+}
+
+class SplashToAppWrapper extends StatefulWidget {
+  @override
+  _SplashToAppWrapperState createState() => _SplashToAppWrapperState();
+}
+
+
+class _SplashToAppWrapperState extends State<SplashToAppWrapper> {
+  bool _showSplash = true;
+  bool _showCharacter = false;
+
+  void _completeSplash() {
+    setState(() {
+      _showSplash = false;
+      _showCharacter = true;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        // Main app content (always present but behind splash)
+        todoScreen(),
+
+        // Splash screen (on top when active)
+        if (_showSplash)
+          SplashScreen(
+            onAnimationComplete: _completeSplash,
+          ),
+
+        // Small character in corner (after splash)
+        if (_showCharacter)
+          Positioned(
+            left: 40,
+            bottom: 40,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                DuoCharacter(size: 60, isJumping: true),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+}
 
 Future<void> main() async { // Make main async
   WidgetsFlutterBinding.ensureInitialized(); // Ensure bindings are initialized
@@ -41,12 +101,12 @@ String _generateUniqueId() {
   return DateTime.now().millisecondsSinceEpoch.toString() + Random().nextInt(1000).toString();
 }
 
-class NoTitle extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(debugShowCheckedModeBanner: true, home: todoScreen());
-  }
-}
+// class NoTitle extends StatelessWidget {
+//   @override
+//   Widget build(BuildContext context) {
+//     return MaterialApp(debugShowCheckedModeBanner: true, home: todoScreen());
+//   }
+// }
 
 class todoScreen extends StatefulWidget {
   @override

@@ -45,12 +45,24 @@ If console shows outdated packages:
 
 > flutter channel stable    
 > flutter upgrade --force     
-> flutter flutter pub cache repair     
+> flutter pub cache repair     
 > flutter clean     
 
 Then try re-starting your project.
 
 **NOTE:** Your 'Java_Home' might be in '../jbr' instead of '../jre'. Do set your ENV variables appropriately.
+
+**Cleaning gradle sometimes helps too!**
+
+In cmd:
+
+> gradlew.bat clean build
+
+then 
+
+
+> gradlew.bat installDebug
+
 
 ---
 

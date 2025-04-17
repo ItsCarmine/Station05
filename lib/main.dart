@@ -12,11 +12,17 @@ import 'package:flutter/services.dart'; // <-- Ensure this import exists
 import 'dart:async';
 import 'dart:io';
 import 'dart:convert';
+import 'package:home_widget/home_widget.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:back_button_interceptor/back_button_interceptor.dart';
+import 'package:flutter/services.dart';  // For SystemNavigator
+import 'dart:async';
+import 'dart:io';
+import 'dart:convert';
 
 // Define box names
 const String taskBoxName = 'tasks';
 const String categoryBoxName = 'categories';
-
 
 class NoTitle extends StatelessWidget {
   @override
@@ -32,7 +38,6 @@ class SplashToAppWrapper extends StatefulWidget {
   @override
   _SplashToAppWrapperState createState() => _SplashToAppWrapperState();
 }
-
 
 class _SplashToAppWrapperState extends State<SplashToAppWrapper> {
   bool _showSplash = true;
@@ -102,6 +107,11 @@ Future<void> main() async { // Make main async
   await Hive.openBox<Task>(taskBoxName);
   await Hive.openBox<String>(categoryBoxName); // Box to store category names
 
+  BackButtonInterceptor.add((stopDefaultButtonEvent, routeInfo) {
+    SystemNavigator.pop(); // Always minimize
+    return true; // Always prevent default
+  });
+
   runApp(NoTitle());
 }
 
@@ -140,6 +150,9 @@ class todoScreenState extends State<todoScreen> {
     taskBox = Hive.box<Task>(taskBoxName);
     categoryBox = Hive.box<String>(categoryBoxName);
     _loadTasksAndCategories();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _updateHomeWidget();
+    });
   }
 
   void _loadTasksAndCategories() {
@@ -285,6 +298,38 @@ class todoScreenState extends State<todoScreen> {
         _focusedDate = picked;
       });
     }
+  }
+
+  Future<void> _updateHomeWidget() async {
+    try {
+      final now = DateTime.now();
+      final todayTasks = taskBox.values.where((task) => 
+        DateUtils.isSameDay(task.dueDate, now)).toList();
+      final pending = todayTasks.where((t) => !t.isCompleted).length;
+
+      print('[MAIN] Task Counts - Total: ${todayTasks.length}, Pending: $pending');
+
+      const channel = MethodChannel('com.example.station5/widget');
+      await channel.invokeMethod('updateWidgetData', {
+        'total': todayTasks.length,
+        'pending': pending,
+      });
+    } catch (e) {
+      print('[MAIN] Widget update failed: $e');
+    }
+  }
+
+  void _onTaskChanged() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _updateHomeWidget();
+    });
+    setState(() {});     // Triggers UI rebuild
+  }
+
+  @override
+  void dispose() {
+    BackButtonInterceptor.removeAll();
+    super.dispose();
   }
 
   Widget buildPageSelect() {
@@ -587,6 +632,7 @@ class todoScreenState extends State<todoScreen> {
                    }
                  }
                });
+                _onTaskChanged(); // Update the widget
                Navigator.of(context).pop(); // Close dialog on success
                ScaffoldMessenger.of(context).showSnackBar(
                  SnackBar(content: Text('Task "${newTask.title}" added to $category.'), duration: Duration(seconds: 2)),
@@ -644,6 +690,7 @@ class todoScreenState extends State<todoScreen> {
     }
 
     task.save(); // Save the updated task object to Hive
+    _onTaskChanged(); // update the widget too!
 
     // Schedule setState after the frame build is complete
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -665,6 +712,7 @@ class todoScreenState extends State<todoScreen> {
      }
      // Remove from Hive box
      task.delete(); 
+     _onTaskChanged();
      setState(() {}); // Update UI
   }
 

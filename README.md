@@ -68,4 +68,17 @@ then
 
 ### App Features (Feature Documentation)
 
-TODO
+---
+
+### What Worked & What Didn't?
+
+---
+
+### Future Upgrades - The Car
+
+
+1. LLM Integration for Personalization, Automatic Scheduling & Estimation of Times for Similar or repeat tasks while increasing productivity! 
+2. 
+
+---
+

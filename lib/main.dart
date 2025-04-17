@@ -8,6 +8,10 @@ import 'focus_screen.dart'; // Import the FocusScreen
 import 'statistics_screen.dart'; // Import the StatisticsScreen
 import 'splash_screen.dart';
 import 'duo_character.dart';
+import 'package:flutter/services.dart'; // <-- Ensure this import exists
+import 'dart:async';
+import 'dart:io';
+import 'dart:convert';
 import 'package:home_widget/home_widget.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:back_button_interceptor/back_button_interceptor.dart';
@@ -78,6 +82,12 @@ class _SplashToAppWrapperState extends State<SplashToAppWrapper> {
 
 Future<void> main() async { // Make main async
   WidgetsFlutterBinding.ensureInitialized(); // Ensure bindings are initialized
+
+  // Lock orientation to portrait
+  await SystemChrome.setPreferredOrientations([
+    DeviceOrientation.portraitUp,
+    DeviceOrientation.portraitDown,
+  ]);
 
   // Initialize Hive
   final appDocumentDir = await getApplicationDocumentsDirectory();
@@ -326,78 +336,57 @@ class todoScreenState extends State<todoScreen> {
     final startOfWeek = _getStartOfWeek(_focusedDate);
     final daysInWeek = List.generate(7, (index) => startOfWeek.add(Duration(days: index)));
 
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          IconButton(
-            icon: Icon(Icons.arrow_left),
-            onPressed: () {
-              setState(() {
-                _focusedDate = _focusedDate.subtract(Duration(days: 7));
-              });
-            },
-          ),
-          Row(
-            children: daysInWeek.map((day) {
-              final bool isSelected = DateUtils.isSameDay(_selectedDate, day);
-              final bool isToday = DateUtils.isSameDay(DateTime.now(), day);
-              final bool hasTasks = _dateHasTasks(day); // Check if the date has tasks
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceAround,
+      children: [
+        ...daysInWeek.map((day) {
+          final bool isSelected = DateUtils.isSameDay(_selectedDate, day);
+          final bool isToday = DateUtils.isSameDay(DateTime.now(), day);
+          final bool hasTasks = _dateHasTasks(day); // Check if the date has tasks
 
-              return Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 2.0),
-                child: Stack( // Use Stack to overlay the dot
-                  alignment: Alignment.topCenter, // Position dot at the top center
-                  children: [
-                    ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: isSelected ? Colors.blue : (isToday ? Colors.blue.shade100 : Colors.white),
-                        foregroundColor: isSelected ? Colors.white : Colors.black,
-                        padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        shape: CircleBorder(),
-                        minimumSize: Size(45, 45), // Slightly larger to accommodate dot
-                      ).copyWith(elevation: MaterialStateProperty.all(isSelected ? 4 : 1)),
-                      onPressed: () => setState(() {
-                        _selectedDate = day;
-                        _focusedDate = day;
-                      }),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(DateFormat.E().format(day).substring(0,1), style: TextStyle(fontSize: 10)),
-                          Text(DateFormat.d().format(day), style: TextStyle(fontSize: 14, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
-                        ],
-                      ),
+          return Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 2.0, horizontal: 1.0),
+              child: Stack(
+                alignment: Alignment.topCenter,
+                children: [
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: isSelected ? Colors.blue : (isToday ? Colors.blue.shade100 : Colors.white),
+                      foregroundColor: isSelected ? Colors.white : Colors.black,
+                      padding: EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                      shape: CircleBorder(),
+                    ).copyWith(elevation: MaterialStateProperty.all(isSelected ? 4 : 1)),
+                    onPressed: () => setState(() {
+                      _selectedDate = day;
+                      _focusedDate = day;
+                    }),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(DateFormat.E().format(day).substring(0,1), style: TextStyle(fontSize: 10)),
+                        Text(DateFormat.d().format(day), style: TextStyle(fontSize: 14, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
+                      ],
                     ),
-                    // Add a dot if the date has tasks
-                    if (hasTasks)
-                      Positioned(
-                        top: 4, // Adjust position as needed
-                        child: Container(
-                          width: 6,
-                          height: 6,
-                          decoration: BoxDecoration(
-                            color: isSelected ? Colors.white : Colors.blue, // Contrast color
-                            shape: BoxShape.circle,
-                          ),
+                  ),
+                  if (hasTasks)
+                    Positioned(
+                      top: 4,
+                      child: Container(
+                        width: 6,
+                        height: 6,
+                        decoration: BoxDecoration(
+                          color: isSelected ? Colors.white : Colors.blue,
+                          shape: BoxShape.circle,
                         ),
                       ),
-                  ],
-                ),
-              );
-            }).toList(),
-          ),
-          IconButton(
-            icon: Icon(Icons.arrow_right),
-            onPressed: () {
-              setState(() {
-                _focusedDate = _focusedDate.add(Duration(days: 7));
-              });
-            },
-          ),
-        ],
-      ),
+                    ),
+                ],
+              ),
+            ),
+          );
+        }).toList(),
+      ],
     );
   }
 

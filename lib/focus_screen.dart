@@ -6,6 +6,9 @@ import 'task_model.dart';
 // Enum to represent Pomodoro phases
 enum PomodoroPhase { work, shortBreak, longBreak }
 
+// Enum to represent Focus Session types
+enum FocusSessionType { pomodoro, flow }
+
 class FocusScreen extends StatefulWidget {
   final Task task;
 
@@ -30,13 +33,27 @@ class _FocusScreenState extends State<FocusScreen> {
   // Simple state: are we timing work or break?
   bool _isWorkPhase = true; 
 
+  // --- NEW STATE ---
+  FocusSessionType? _sessionType; // To store the user's choice
+  int _flowSecondsElapsed = 0; // Stopwatch timer for flow mode
+  // ---------------
+
   @override
   void initState() {
     super.initState();
     // Initialize controllers with default values
     _workDurationController = TextEditingController(text: _workDurationMinutes.toString());
     _breakDurationController = TextEditingController(text: _breakDurationMinutes.toString());
-    _resetTimer();
+    // Don't reset timer here, wait for session type selection
+    // _resetTimer();
+
+    // --- Show selection dialog shortly after build ---
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_sessionType == null && mounted) { // Check if mounted
+        _showSessionTypeDialog();
+      }
+    });
+    // ------------------------------------------------
   }
 
   @override
@@ -141,71 +158,139 @@ class _FocusScreenState extends State<FocusScreen> {
       }
    }
 
+  // --- NEW: Show Session Type Selection Dialog ---
+  Future<void> _showSessionTypeDialog() async {
+    final selectedType = await showDialog<FocusSessionType>(
+      context: context,
+      barrierDismissible: false, // User must choose
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('Choose Focus Session Type'),
+          content: Text('Select how you want to focus on "${widget.task.title}".'),
+          actions: <Widget>[
+            TextButton(
+              child: Text('Pomodoro'),
+              onPressed: () {
+                Navigator.of(context).pop(FocusSessionType.pomodoro);
+              },
+            ),
+            TextButton(
+              child: Text('Flow (Stopwatch)'),
+              onPressed: () {
+                Navigator.of(context).pop(FocusSessionType.flow);
+              },
+            ),
+            // Optional: Cancel button if you want to allow backing out
+            // TextButton(
+            //   child: Text('Cancel'),
+            //   onPressed: () => Navigator.of(context).pop(null), // Or pop the screen
+            // ),
+          ],
+        );
+      },
+    );
+
+    if (selectedType != null && mounted) { // Check if mounted after async gap
+      setState(() {
+        _sessionType = selectedType;
+        if (_sessionType == FocusSessionType.pomodoro) {
+          _resetTimer(); // Initialize Pomodoro timer
+        } else {
+          // Initialize Flow timer state (starts at 0, not running)
+          _flowSecondsElapsed = 0;
+          _isTimerRunning = false;
+          _timer?.cancel(); // Ensure no previous timer is running
+        }
+      });
+    } else if (mounted) {
+       // Handle case where dialog is dismissed without selection (e.g., back button)
+       // Pop the focus screen itself if no choice is made
+       Navigator.of(context).pop();
+    }
+  }
+  // -------------------------------------------
 
   @override
   Widget build(BuildContext context) {
-    final phaseColor = _isWorkPhase ? Colors.red.shade300 : Colors.green.shade300;
-    final phaseName = _isWorkPhase ? "Work Phase" : "Break Phase";
+    // --- Conditionally build UI based on session type ---
+    if (_sessionType == null) {
+      // Show loading or placeholder while dialog is potentially showing
+      return Scaffold(
+        appBar: AppBar(title: Text("Focus: ${widget.task.title}")),
+        body: Center(child: CircularProgressIndicator()),
+      );
+    } else if (_sessionType == FocusSessionType.pomodoro) {
+      return _buildPomodoroUI(context);
+    } else { // _sessionType == FocusSessionType.flow
+      return _buildFlowUI(context);
+    }
+    // ----------------------------------------------------
+  }
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text("Focus: ${widget.task.title}"),
-        backgroundColor: phaseColor,
+  // --- Refactored Pomodoro UI Builder ---
+  Widget _buildPomodoroUI(BuildContext context) {
+     final phaseColor = _isWorkPhase ? Colors.red.shade300 : Colors.green.shade300;
+     final phaseName = _isWorkPhase ? "Work Phase" : "Break Phase";
+
+     return Scaffold(
+       appBar: AppBar(
+         title: Text("Focus: ${widget.task.title} (Pomodoro)"),
+         backgroundColor: phaseColor,
          leading: IconButton(
            icon: Icon(Icons.arrow_back),
            onPressed: _endSession, // Use end session logic for back button too
-        ),
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: SingleChildScrollView( // Allow scrolling if content overflows
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: <Widget>[
-              // Editable Durations
-              Row(
+         ),
+       ),
+       body: Padding(
+         padding: const EdgeInsets.all(16.0),
+         child: SingleChildScrollView( // Allow scrolling if content overflows
+           child: Column(
+             mainAxisAlignment: MainAxisAlignment.center,
+             children: <Widget>[
+               // Editable Durations
+               Row(
                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                  children: [
                     _buildDurationEditor("Work (min)", _workDurationController, true),
                     _buildDurationEditor("Break (min)", _breakDurationController, false),
                  ],
-              ),
-              SizedBox(height: 30),
+               ),
+               SizedBox(height: 30),
 
-              // Phase Indicator
-              Text(
+               // Phase Indicator
+               Text(
                  phaseName,
                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(color: phaseColor),
-              ),
-              SizedBox(height: 10),
+               ),
+               SizedBox(height: 10),
 
-              // Timer Display
-              Text(
-                _formatTime(_currentSeconds),
-                style: Theme.of(context).textTheme.displayLarge?.copyWith(
+               // Timer Display
+               Text(
+                 _formatTime(_currentSeconds),
+                 style: Theme.of(context).textTheme.displayLarge?.copyWith(
                    fontWeight: FontWeight.bold,
                    fontSize: 80,
                    color: phaseColor,
-                ),
-              ),
-              SizedBox(height: 30),
+                 ),
+               ),
+               SizedBox(height: 30),
 
-              // Timer Controls (Start/Pause)
-              ElevatedButton.icon(
-                icon: Icon(_isTimerRunning ? Icons.pause : Icons.play_arrow),
-                label: Text(_isTimerRunning ? 'Pause' : 'Start'),
-                onPressed: _toggleTimer,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: phaseColor,
-                  foregroundColor: Colors.white,
-                  padding: EdgeInsets.symmetric(horizontal: 50, vertical: 15),
-                  textStyle: TextStyle(fontSize: 20),
-                ),
-              ),
-              SizedBox(height: 40),
+               // Timer Controls (Start/Pause)
+               ElevatedButton.icon(
+                 icon: Icon(_isTimerRunning ? Icons.pause : Icons.play_arrow),
+                 label: Text(_isTimerRunning ? 'Pause' : 'Start'),
+                 onPressed: _toggleTimer, // Uses Pomodoro logic
+                 style: ElevatedButton.styleFrom(
+                   backgroundColor: phaseColor,
+                   foregroundColor: Colors.white,
+                   padding: EdgeInsets.symmetric(horizontal: 50, vertical: 15),
+                   textStyle: TextStyle(fontSize: 20),
+                 ),
+               ),
+               SizedBox(height: 40),
 
-              // End Session Button
-              OutlinedButton.icon(
+               // End Session Button
+               OutlinedButton.icon(
                  icon: Icon(Icons.stop_circle_outlined),
                  label: Text("End Focus Session"),
                  onPressed: _endSession,
@@ -214,15 +299,108 @@ class _FocusScreenState extends State<FocusScreen> {
                    side: BorderSide(color: Colors.grey.shade400),
                    padding: EdgeInsets.symmetric(horizontal: 30, vertical: 10),
                  ),
-              )
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+               )
+             ],
+           ),
+         ),
+       ),
+     );
+   }
+   // ------------------------------------
 
-  // Helper Widget for Duration Editor
+   // --- NEW: Flow Session UI Builder ---
+   Widget _buildFlowUI(BuildContext context) {
+     // Flow mode specific UI
+     return Scaffold(
+       appBar: AppBar(
+         title: Text("Focus: ${widget.task.title} (Flow)"),
+         backgroundColor: Colors.indigo.shade300, // Different color for flow
+         leading: IconButton(
+           icon: Icon(Icons.arrow_back),
+           onPressed: _endSession, // Use the same end session logic
+         ),
+       ),
+       body: Padding(
+         padding: const EdgeInsets.all(16.0),
+         child: Center( // Center the Column horizontally
+           child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.center, // Center children horizontally
+            children: <Widget>[
+               Text(
+                 "Flow Session Timer",
+                 style: Theme.of(context).textTheme.headlineSmall?.copyWith(color: Colors.indigo),
+               ),
+               SizedBox(height: 10),
+
+               // Timer Display (Counting Up)
+               Text(
+                 _formatTime(_flowSecondsElapsed), // Format the elapsed flow time
+                 style: Theme.of(context).textTheme.displayLarge?.copyWith(
+                   fontWeight: FontWeight.bold,
+                   fontSize: 80,
+                   color: Colors.indigo,
+                 ),
+               ),
+               SizedBox(height: 30),
+
+               // Timer Controls (Start/Pause)
+               ElevatedButton.icon(
+                 icon: Icon(_isTimerRunning ? Icons.pause : Icons.play_arrow),
+                 label: Text(_isTimerRunning ? 'Pause' : 'Start'),
+                 onPressed: _toggleFlowTimer, // Need to implement this
+                 style: ElevatedButton.styleFrom(
+                   backgroundColor: Colors.indigo.shade300,
+                   foregroundColor: Colors.white,
+                   padding: EdgeInsets.symmetric(horizontal: 50, vertical: 15),
+                   textStyle: TextStyle(fontSize: 20),
+                 ),
+               ),
+               SizedBox(height: 40),
+
+               // End Session Button
+               OutlinedButton.icon(
+                 icon: Icon(Icons.stop_circle_outlined),
+                 label: Text("End Flow Session"),
+                 onPressed: _endSession, // Reuse end session logic
+                 style: OutlinedButton.styleFrom(
+                   foregroundColor: Colors.grey[700],
+                   side: BorderSide(color: Colors.grey.shade400),
+                   padding: EdgeInsets.symmetric(horizontal: 30, vertical: 10),
+                 ),
+               )
+             ],
+           ),
+         ),
+       ),
+     );
+   }
+   // ---------------------------------
+
+   // --- Flow Timer Logic ---
+   void _toggleFlowTimer() {
+      setState(() {
+         if (_isTimerRunning) {
+            _timer?.cancel(); // Pause the timer
+         } else {
+            // Start the timer
+            _timer = Timer.periodic(Duration(seconds: 1), (timer) {
+               if (!mounted) { // Check if widget is still mounted
+                  timer.cancel();
+                  return;
+               }
+               setState(() {
+                  _flowSecondsElapsed++;
+                  _secondsElapsedThisSession++; // Also track total time for saving
+               });
+            });
+         }
+         _isTimerRunning = !_isTimerRunning; // Toggle the running state
+      });
+   }
+   // ---------------------------------------
+
+   // Helper Widget for Duration Editor
    Widget _buildDurationEditor(String label, TextEditingController controller, bool isWork) {
       return Column(
          children: [

@@ -435,6 +435,8 @@ class todoScreenState extends State<todoScreen> {
             Flexible(
               child: Text(
                 task.title,
+                maxLines: 1, // Limit title to 1 line
+                overflow: TextOverflow.ellipsis, // Add ellipsis if overflow
                 style: TextStyle(
                   // Apply strikethrough based on instance completion
                   decoration: isInstanceCompleted ? TextDecoration.lineThrough : null,
@@ -448,7 +450,13 @@ class todoScreenState extends State<todoScreen> {
               ),
           ],
         ),
-        subtitle: task.description.isNotEmpty ? Text(task.description) : null, // Hide subtitle if empty
+        subtitle: task.description.isNotEmpty 
+          ? Text(
+              task.description, 
+              maxLines: 2, // Limit description to 2 lines
+              overflow: TextOverflow.ellipsis, // Add ellipsis if overflow
+            )
+          : null, // Hide subtitle if empty
         trailing: Row(
            mainAxisSize: MainAxisSize.min,
            children: [
@@ -528,7 +536,11 @@ class todoScreenState extends State<todoScreen> {
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: Text("Add Subtask to ${parentTask.title}"),
+          title: Text(
+            "Add Subtask to ${parentTask.title}",
+            maxLines: 2, // Limit dialog title
+            overflow: TextOverflow.ellipsis, // Add ellipsis
+          ),
           content: _AddSubtaskDialogContent(
             parentTask: parentTask,
             onSubtaskAdded: (newSubtask) async { // Make async

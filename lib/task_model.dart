@@ -38,6 +38,14 @@ class Task extends HiveObject {
   @HiveField(10)
   List<DateTime> completionDates;
 
+  // --- New fields for subtasks ---
+  @HiveField(11)
+  final String? parentId; // Null if it's a top-level task
+
+  @HiveField(12)
+  List<String> subtaskIds; // IDs of direct children tasks
+  // ------------------------------
+
   Task({
     required this.id,
     required this.category,
@@ -50,7 +58,10 @@ class Task extends HiveObject {
     this.recurrenceType = 'none',
     this.recurrenceInterval = 1,
     List<DateTime>? completionDates,
-  }) : this.completionDates = completionDates ?? [];
+    this.parentId, // Add to constructor
+    List<String>? subtaskIds, // Add to constructor
+  }) : this.completionDates = completionDates ?? [],
+       this.subtaskIds = subtaskIds ?? []; // Initialize subtaskIds
 
   Task copyWith({
     String? id,
@@ -64,6 +75,9 @@ class Task extends HiveObject {
     String? recurrenceType,
     int? recurrenceInterval,
     List<DateTime>? completionDates,
+    String? parentId,
+    bool clearParentId = false, // Add flag to explicitly clear parentId
+    List<String>? subtaskIds,
   }) {
     return Task(
       id: id ?? this.id,
@@ -77,6 +91,8 @@ class Task extends HiveObject {
       recurrenceType: recurrenceType ?? this.recurrenceType,
       recurrenceInterval: recurrenceInterval ?? this.recurrenceInterval,
       completionDates: completionDates ?? this.completionDates,
+      parentId: clearParentId ? null : parentId ?? this.parentId, // Handle parentId update/clear
+      subtaskIds: subtaskIds ?? this.subtaskIds,
     );
   }
 } 

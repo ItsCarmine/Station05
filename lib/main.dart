@@ -460,7 +460,16 @@ class todoScreenState extends State<todoScreen> {
         trailing: Row(
            mainAxisSize: MainAxisSize.min,
            children: [
-              Text(task.category, style: TextStyle(color: Colors.grey, fontSize: 12)),
+              SizedBox( // Wrap with SizedBox for max width
+                width: 60, // Set a max width (adjust as needed)
+                child: Text(
+                  task.category, 
+                  style: TextStyle(color: Colors.grey, fontSize: 12),
+                  maxLines: 1, // Limit to 1 line
+                  overflow: TextOverflow.ellipsis, // Add ellipsis
+                  softWrap: false, // Prevent wrapping before ellipsis
+                ),
+              ),
               SizedBox(width: 4),
               // --- Add Subtask Button ---
               IconButton(
@@ -643,6 +652,7 @@ class todoScreenState extends State<todoScreen> {
               newCategory = value.trim(); // Trim whitespace
             },
             decoration: InputDecoration(hintText: "Enter category name"),
+            maxLength: 20, // Enforce 20 character limit
           ),
           actions: [
             TextButton(

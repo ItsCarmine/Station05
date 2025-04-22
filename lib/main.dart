@@ -1081,22 +1081,14 @@ class _AddTaskDialogContentState extends State<_AddTaskDialogContent> {
   String taskDescription = '';
   late DateTime taskDueDate;
 
-  // State for Recurrence
-  bool isRecurring = false;
-  String recurrenceType = 'daily';
-  int recurrenceInterval = 1;
-  late TextEditingController _intervalController;
-
   @override
   void initState() {
     super.initState();
     taskDueDate = widget.initialDueDate; // Access widget property here
-    _intervalController = TextEditingController(text: '1');
   }
 
   @override
   void dispose() {
-    _intervalController.dispose(); // Dispose controller correctly
     super.dispose();
   }
 
@@ -1110,9 +1102,9 @@ class _AddTaskDialogContentState extends State<_AddTaskDialogContent> {
         title: taskTitle,
         description: taskDescription,
         dueDate: taskDueDate,
-        isRecurring: isRecurring,
-        recurrenceType: isRecurring ? recurrenceType : 'none',
-        recurrenceInterval: isRecurring ? recurrenceInterval : 1,
+        isRecurring: false,
+        recurrenceType: 'none',
+        recurrenceInterval: 1,
         completionDates: [],
         parentId: null, // Explicitly null for top-level tasks
         subtaskIds: [], // Explicitly empty for new tasks
@@ -1125,9 +1117,6 @@ class _AddTaskDialogContentState extends State<_AddTaskDialogContent> {
 
   @override
   Widget build(BuildContext context) {
-    // ... (build method for the dialog content remains largely the same) ...
-    // Make sure all calls to setState are just setState(), not setStateDialog()
-    // Ensure all references like widget.category work as expected.
     return Form(
       key: _formKey,
       child: SingleChildScrollView(
@@ -1170,82 +1159,11 @@ class _AddTaskDialogContentState extends State<_AddTaskDialogContent> {
                 ),
               ],
             ),
-            Divider(height: 16),
-            // Recurrence Settings
-            CheckboxListTile(
-              title: Text("Make this task recurring?"),
-              value: isRecurring,
-              onChanged: (bool? value) {
-                setState(() { // Use standard setState
-                  isRecurring = value ?? false;
-                });
-              },
-              controlAffinity: ListTileControlAffinity.leading,
-              contentPadding: EdgeInsets.zero,
-            ),
-            if (isRecurring)
-              Padding(
-                padding: const EdgeInsets.only(top: 8.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    DropdownButton<String>(
-                      value: recurrenceType,
-                      items: <String>['daily', 'weekly']
-                          .map<DropdownMenuItem<String>>((String value) {
-                        return DropdownMenuItem<String>(
-                          value: value,
-                          child: Text(value == 'daily' ? 'Daily' : 'Weekly'),
-                        );
-                      }).toList(),
-                      onChanged: (String? newValue) {
-                        setState(() { // Use standard setState
-                          recurrenceType = newValue!;
-                        });
-                      },
-                      isExpanded: true,
-                    ),
-                    SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Text("Every "),
-                        SizedBox(
-                          width: 50,
-                          child: TextFormField(
-                            controller: _intervalController,
-                            keyboardType: TextInputType.number,
-                            textAlign: TextAlign.center,
-                            decoration: InputDecoration(
-                              isDense: true,
-                              contentPadding: EdgeInsets.symmetric(vertical: 8),
-                            ),
-                            validator: (value) {
-                              if (value == null || value.isEmpty) return 'Inv.';
-                              final n = int.tryParse(value);
-                              if (n == null || n < 1) return 'Inv.';
-                              return null;
-                            },
-                            onSaved: (value) => recurrenceInterval = int.parse(value!),
-                            onChanged: (value) {
-                               final n = int.tryParse(value);
-                               if (n != null && n > 0) {
-                                  // No setState needed here if UI doesn't depend live
-                                  recurrenceInterval = n;
-                               }
-                            },
-                          ),
-                        ),
-                        Text(recurrenceType == 'daily' ? " days" : " weeks"),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-             SizedBox(height: 20),
-             ElevatedButton(
-                 onPressed: _addTask, // Call the internal add task method
-                 child: Text("Add Task"),
-             )
+            SizedBox(height: 20),
+            ElevatedButton(
+                onPressed: _addTask, // Call the internal add task method
+                child: Text("Add Task"),
+            )
           ],
         ),
       ),

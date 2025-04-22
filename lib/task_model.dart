@@ -46,6 +46,11 @@ class Task extends HiveObject {
   List<String> subtaskIds; // IDs of direct children tasks
   // ------------------------------
 
+  // --- New field for weekly recurrence days ---
+  @HiveField(13)
+  List<int> recurrenceDaysOfWeek; // Stores 1-7 for Mon-Sun, used if type is weekly
+  // ------------------------------------------
+
   Task({
     required this.id,
     required this.category,
@@ -60,8 +65,10 @@ class Task extends HiveObject {
     List<DateTime>? completionDates,
     this.parentId, // Add to constructor
     List<String>? subtaskIds, // Add to constructor
+    List<int>? recurrenceDaysOfWeek, // Add to constructor
   }) : this.completionDates = completionDates ?? [],
-       this.subtaskIds = subtaskIds ?? []; // Initialize subtaskIds
+       this.subtaskIds = subtaskIds ?? [], // Initialize subtaskIds
+       this.recurrenceDaysOfWeek = recurrenceDaysOfWeek ?? []; // Initialize days of week
 
   Task copyWith({
     String? id,
@@ -78,6 +85,7 @@ class Task extends HiveObject {
     String? parentId,
     bool clearParentId = false, // Add flag to explicitly clear parentId
     List<String>? subtaskIds,
+    List<int>? recurrenceDaysOfWeek,
   }) {
     return Task(
       id: id ?? this.id,
@@ -93,6 +101,7 @@ class Task extends HiveObject {
       completionDates: completionDates ?? this.completionDates,
       parentId: clearParentId ? null : parentId ?? this.parentId, // Handle parentId update/clear
       subtaskIds: subtaskIds ?? this.subtaskIds,
+      recurrenceDaysOfWeek: recurrenceDaysOfWeek ?? this.recurrenceDaysOfWeek,
     );
   }
 } 

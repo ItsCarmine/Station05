@@ -30,13 +30,14 @@ class TaskAdapter extends TypeAdapter<Task> {
       completionDates: (fields[10] as List?)?.cast<DateTime>(),
       parentId: fields[11] as String?,
       subtaskIds: (fields[12] as List?)?.cast<String>(),
+      recurrenceDaysOfWeek: (fields[13] as List?)?.cast<int>(),
     );
   }
 
   @override
   void write(BinaryWriter writer, Task obj) {
     writer
-      ..writeByte(13)
+      ..writeByte(14)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -62,7 +63,9 @@ class TaskAdapter extends TypeAdapter<Task> {
       ..writeByte(11)
       ..write(obj.parentId)
       ..writeByte(12)
-      ..write(obj.subtaskIds);
+      ..write(obj.subtaskIds)
+      ..writeByte(13)
+      ..write(obj.recurrenceDaysOfWeek);
   }
 
   @override

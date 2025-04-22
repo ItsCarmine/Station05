@@ -9,6 +9,7 @@ import 'statistics_screen.dart'; // Import the StatisticsScreen
 import 'splash_screen.dart';
 import 'duo_character.dart';
 import 'package:flutter/services.dart'; // Import SystemChrome
+import 'edit_task_screen.dart'; // Import the new edit screen
 
 // Define box names
 const String taskBoxName = 'tasks';
@@ -171,25 +172,71 @@ class todoScreenState extends State<todoScreen> {
   // Get tasks for the currently selected date
   List<Task> _getTasksForSelectedDate() {
     return taskBox.values.where((task) {
-      // --- Only include top-level tasks initially ---
+      // Only include top-level tasks initially
       if (task.parentId != null) {
         return false;
       }
-      // ----------------------------------------------
 
       final selectedDay = _selectedDate;
 
       if (task.isRecurring) {
-        // Show if it's due today OR if it was completed today
-        final isDueToday = DateUtils.isSameDay(task.dueDate, selectedDay);
-        final wasCompletedToday = task.completionDates.any((completedDate) => DateUtils.isSameDay(completedDate, selectedDay));
-        return isDueToday || wasCompletedToday;
+        // Show if:
+        // 1. It was completed on the selected day.
+        // OR
+        // 2. The selected day is a valid recurrence instance date according to the schedule.
+        final bool wasCompletedOnSelectedDay = task.completionDates.any((d) => DateUtils.isSameDay(d, selectedDay));
+        final bool isScheduledForSelectedDay = _isDateARecurrenceInstance(task, selectedDay);
+
+        return wasCompletedOnSelectedDay || isScheduledForSelectedDay;
+
       } else {
-        // Show non-recurring task if its due date is the selected date
+        // Non-recurring: Show if its due date is the selected date
         return DateUtils.isSameDay(task.dueDate, selectedDay);
       }
     }).toList();
   }
+
+  // --- Helper to check if a date is a valid recurrence instance --- 
+  bool _isDateARecurrenceInstance(Task task, DateTime dateToCheck) {
+      if (!task.isRecurring) return false;
+      if (DateUtils.isSameDay(dateToCheck, task.dueDate)) return true; // Always show on the current due date
+      if (dateToCheck.isBefore(task.dueDate) && task.completionDates.any((d) => DateUtils.isSameDay(d, dateToCheck)) ){
+         // If checking a past date that was completed, it was an instance
+         return true;
+      }
+      
+      // More robust check based on original due date (or first completion?) and rules
+      // This requires knowing the *original* start date, which we don't explicitly store.
+      // Let's assume the *first* completion date or the current due date if no completions yet,
+      // gives us a reference point.
+      DateTime referenceDate = task.completionDates.isNotEmpty 
+          ? task.completionDates.first // Use first completion as anchor?
+          : task.dueDate; // Or current due date if never completed
+      
+      // Adjust referenceDate to be on or before dateToCheck
+      if(referenceDate.isAfter(dateToCheck)) {
+         // This scenario is complex - trying to determine past instances without a fixed start date.
+         // For now, let's rely on the primary checks above (is current due date or was completed).
+         // A true start date field would be needed for full historical accuracy.
+         return DateUtils.isSameDay(dateToCheck, task.dueDate);
+      }
+
+      if (task.recurrenceType == 'daily') {
+          int daysDifference = dateToCheck.difference(referenceDate).inDays;
+          return daysDifference >= 0 && daysDifference % task.recurrenceInterval == 0;
+      } else if (task.recurrenceType == 'weekly') {
+          if (!task.recurrenceDaysOfWeek.contains(dateToCheck.weekday)) {
+             return false; // Doesn't fall on a selected weekday
+          }
+          DateTime startOfWeekReference = referenceDate.subtract(Duration(days: referenceDate.weekday - 1));
+          DateTime startOfWeekToCheck = dateToCheck.subtract(Duration(days: dateToCheck.weekday - 1));
+          int weeksDifference = startOfWeekToCheck.difference(startOfWeekReference).inDays ~/ 7;
+          return weeksDifference >= 0 && weeksDifference % task.recurrenceInterval == 0;
+      }
+
+      return false; // Should not happen if isRecurring is true
+  }
+  // --------------------------------------------------------------
 
   // Helper to check if a date has any tasks
   bool _dateHasTasks(DateTime date) {
@@ -507,8 +554,21 @@ class todoScreenState extends State<todoScreen> {
               ),
            ]
         ),
-        onTap: () {
-          print("Tapped task: ${task.title} (ID: ${task.id})");
+        onTap: () async { // Make async to handle potential refresh
+          // Navigate and wait for a potential result (e.g., true if saved/deleted)
+          final result = await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => EditTaskScreen(task: task, taskBox: taskBox),
+            ),
+          );
+          // If the edit screen indicated a change, refresh the list
+          if (result == true && mounted) { 
+            setState(() {
+              // Could potentially optimize by only reloading if necessary
+              _loadTasksAndCategories(); 
+            });
+          }
         },
          onLongPress: () {
             showDialog(
@@ -541,6 +601,15 @@ class todoScreenState extends State<todoScreen> {
 
   // --- Add Subtask Dialog Implementation ---
   void _showAddSubtaskDialog(BuildContext context, Task parentTask) {
+    // --- Prevent adding subtask to recurring task ---
+    if (parentTask.isRecurring) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Cannot add subtasks to recurring tasks.')),
+      );
+      return; // Do not show the dialog
+    }
+    // ------------------------------------------------
+
     showDialog(
       context: context,
       builder: (BuildContext context) {
@@ -767,36 +836,37 @@ class todoScreenState extends State<todoScreen> {
 
   // Update task completion status in Hive
   void _updateTaskCompletion(Task task, bool isChecked) {
-    // Get the date the checkbox is being interacted with (relevant for historical view)
     final DateTime interactionDate = _selectedDate; // Use the currently viewed date
 
     if (task.isRecurring) {
       if (isChecked) {
         // --- Mark recurring task complete for this date ---
-        // Only add if not already marked complete for this specific date
         if (!task.completionDates.any((date) => DateUtils.isSameDay(date, interactionDate))) {
-          // Ensure the date being added matches the *expected* due date for this completion
-          // This prevents marking complete far in the future/past accidentally
-          // We'll assume for now the interactionDate IS the correct due date being completed.
           task.completionDates.add(interactionDate);
+          task.completionDates.sort(); // Keep completion dates ordered
 
-          // Calculate next actual due date based on the date just completed
-          DateTime nextDueDate = interactionDate; // Start from the date just completed
-          if (task.recurrenceType == 'daily') {
-            nextDueDate = nextDueDate.add(Duration(days: task.recurrenceInterval));
-          } else if (task.recurrenceType == 'weekly') {
-            nextDueDate = nextDueDate.add(Duration(days: 7 * task.recurrenceInterval));
+          DateTime nextDueDate = _calculateNextDueDate(task, interactionDate);
+          task.dueDate = nextDueDate;
+          task.isCompleted = false; 
+          print("[UpdateComplete] New Due Date for ${task.title}: ${DateFormat.yMd().format(nextDueDate)}");
+
+          // --- Reset ALL subtasks for the next occurrence ---
+          for (String subtaskId in task.subtaskIds) {
+            Task? subtask = taskBox.get(subtaskId);
+            if (subtask != null) {
+               // Reset regardless of previous state
+               subtask.isCompleted = false;
+               subtask.save(); 
+               print("[UpdateComplete] Resetting subtask: ${subtask.title}");
+            }
           }
-          task.dueDate = nextDueDate; // Update to the next occurrence
-          task.isCompleted = false; // The task overall is not "done", just this instance
+          // --------------------------------------------
         }
       } else {
         // --- Un-checking a recurring task instance ---
-        // Remove the specific date from completionDates
+        // ONLY remove the completion date. Do NOT change dueDate.
         task.completionDates.removeWhere((date) => DateUtils.isSameDay(date, interactionDate));
-        // Potentially reset the main dueDate if the uncompleted date was the *latest* one?
-        // For now, let's keep it simple: just remove the completion record.
-        // The main dueDate still points to the next scheduled occurrence.
+        print("[UpdateComplete] Unchecked ${task.title} for ${DateFormat.yMd().format(interactionDate)}. Due date remains ${DateFormat.yMd().format(task.dueDate)}");
       }
     } else {
       // --- Non-recurring task --- 
@@ -805,13 +875,58 @@ class todoScreenState extends State<todoScreen> {
 
     task.save(); // Save the updated task object to Hive
 
-    // Schedule setState after the frame build is complete
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) { // Check if the widget is still mounted
+      if (mounted) {
         setState(() {});
       }
     });
   }
+
+  // --- Helper to Calculate Next Due Date --- 
+  DateTime _calculateNextDueDate(Task task, DateTime completedDate) {
+    DateTime current = completedDate;
+
+    if (task.recurrenceType == 'daily') {
+      return current.add(Duration(days: task.recurrenceInterval));
+    } 
+    else if (task.recurrenceType == 'weekly') {
+      if (task.recurrenceDaysOfWeek.isEmpty) {
+          // Handle case where weekly is selected but no days are - fallback to daily?
+          print("Warning: Weekly task ${task.title} has no selected days. Calculating next due date like daily.");
+          return current.add(Duration(days: 7 * task.recurrenceInterval)); // Or maybe just 1 day?
+      }
+
+      DateTime nextPotentialDate = current; // Start checking from the day after completion
+      int daysChecked = 0; // Safety break
+      
+      while (daysChecked < 365 * 5) { // Limit search to prevent infinite loops
+        daysChecked++;
+        nextPotentialDate = nextPotentialDate.add(Duration(days: 1));
+        int currentWeekday = nextPotentialDate.weekday; // 1 (Mon) to 7 (Sun)
+
+        // Is this weekday selected?
+        if (task.recurrenceDaysOfWeek.contains(currentWeekday)) {
+            // Does it align with the weekly interval?
+            // Calculate weeks passed since the *completed* date's week start.
+            DateTime startOfWeekCompleted = completedDate.subtract(Duration(days: completedDate.weekday - 1));
+            DateTime startOfWeekPotential = nextPotentialDate.subtract(Duration(days: nextPotentialDate.weekday - 1));
+            int weeksPassed = startOfWeekPotential.difference(startOfWeekCompleted).inDays ~/ 7;
+
+            if (weeksPassed >= 0 && weeksPassed % task.recurrenceInterval == 0) {
+               // This is the next valid date
+               return nextPotentialDate;
+            }
+        }
+      }
+       // Fallback if loop finishes (shouldn't normally happen with < 5 year limit)
+       print("Warning: Could not find next weekly due date for ${task.title} within 5 years. Defaulting to daily calculation.");
+       return current.add(Duration(days: 7 * task.recurrenceInterval));
+    } 
+    else { // 'none' or unexpected type
+      return task.dueDate; // No change if not recurring
+    }
+  }
+  // --------------------------------------
 
   // Optional: Add delete task functionality
   void _deleteTask(Task task) {
@@ -904,6 +1019,7 @@ class _AddSubtaskDialogContentState extends State<_AddSubtaskDialogContent> {
         recurrenceInterval: 1,
         completionDates: [],
         subtaskIds: [], // Subtasks don't have their own subtasks (for now)
+        recurrenceDaysOfWeek: [], // Initialize new field
       );
 
       widget.onSubtaskAdded(newSubtask);
@@ -1000,6 +1116,7 @@ class _AddTaskDialogContentState extends State<_AddTaskDialogContent> {
         completionDates: [],
         parentId: null, // Explicitly null for top-level tasks
         subtaskIds: [], // Explicitly empty for new tasks
+        recurrenceDaysOfWeek: [], // Initialize new field
       );
 
       widget.onTaskAdded(newTask); // Use the callback via widget property

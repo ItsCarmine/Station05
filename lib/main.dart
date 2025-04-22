@@ -597,40 +597,41 @@ class todoScreenState extends State<todoScreen> {
           title: Text("Select or Create Category"),
           content: Container(
             width: double.maxFinite,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
+            // Use ListView for better scrolling if categories grow
+            child: ListView(
+              shrinkWrap: true, // Prevent unbounded height
               children: [
-                // Use tasksByCategory.keys for existing categories
-                ...tasksByCategory.keys.map((category) => Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4.0),
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Color(0xFF8D5353),
-                      foregroundColor: Colors.white,
-                      minimumSize: Size(double.infinity, 50),
-                    ),
+                // --- Existing Categories with Delete Buttons ---
+                ...tasksByCategory.keys.map((category) => ListTile(
+                  title: Text(category),
+                  onTap: () {
+                     Navigator.of(context).pop();
+                     _showAddTaskDialog(context, category);
+                  },
+                  trailing: IconButton(
+                    icon: Icon(Icons.delete_outline, color: Colors.redAccent),
+                    tooltip: 'Delete Category',
                     onPressed: () {
-                      Navigator.of(context).pop();
-                      // Go directly to add task dialog for the selected category
-                      _showAddTaskDialog(context, category);
+                      // Close the current dialog before showing confirmation
+                      Navigator.of(context).pop(); 
+                      _confirmDeleteCategory(context, category); // Show confirmation dialog
                     },
-                    child: Text(category),
                   ),
-                )),
-
+                  contentPadding: EdgeInsets.symmetric(horizontal: 8.0), // Adjust padding
+                )).toList(), // Convert map result to list
+                // ---------------------------------------------
                 SizedBox(height: 10),
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.grey[300],
-                    foregroundColor: Colors.black,
-                    minimumSize: Size(double.infinity, 50),
-                  ),
-                  onPressed: () {
+                // --- Create New Category Button ---
+                ListTile(
+                  leading: Icon(Icons.add_circle_outline), 
+                  title: Text("Create New Category"),
+                  onTap: () {
                     Navigator.of(context).pop();
                     _showCreateCategoryDialog(context);
                   },
-                  child: Text("Create New Category"),
+                  contentPadding: EdgeInsets.symmetric(horizontal: 8.0),
                 ),
+                // ---------------------------------
               ],
             ),
           ),
@@ -638,6 +639,36 @@ class todoScreenState extends State<todoScreen> {
       },
     );
   }
+
+  // --- Confirmation Dialog for Category Deletion ---
+  void _confirmDeleteCategory(BuildContext context, String category) {
+    showDialog(
+      context: context,
+      builder: (BuildContext ctx) {
+        return AlertDialog(
+          title: Text('Delete Category "$category"?'),
+          content: Text('Are you sure? Deleting this category will also delete all associated tasks permanently.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(), // Just close the confirmation dialog
+              child: Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.of(ctx).pop(); // Close the confirmation dialog
+                _deleteCategory(category); // Proceed with deletion
+                 ScaffoldMessenger.of(context).showSnackBar(
+                   SnackBar(content: Text('Category "$category" deleted.'), duration: Duration(seconds: 2)),
+                 );
+              },
+              child: Text('Delete', style: TextStyle(color: Colors.red)),
+            ),
+          ],
+        );
+      },
+    );
+  }
+  // -------------------------------------------------
 
   void _showCreateCategoryDialog(BuildContext context) {
     String newCategory = '';

@@ -124,6 +124,7 @@ class todoScreenState extends State<todoScreen> {
 
   // Keep the map for easy access in UI, but populate from Hive
   Map<String, List<Task>> tasksByCategory = {};
+  Map<String, bool> _expandedTasks = {};
 
   @override
   void initState() {
@@ -410,8 +411,9 @@ class todoScreenState extends State<todoScreen> {
             // Build the main task tile
             taskWidgets.add(_buildTaskTile(task, depth));
 
-            // Recursively build subtask tiles if any exist
-            if (task.subtaskIds.isNotEmpty) {
+            // --- Conditionally build subtask tiles --- 
+            final bool isExpanded = _expandedTasks[task.id] ?? false;
+            if (task.subtaskIds.isNotEmpty && isExpanded) {
                 // print('[buildTaskTree] Task ${task.title} has subtask IDs: ${task.subtaskIds}');
                 List<Task> subtasks = [];
                 for (String id in task.subtaskIds) {
@@ -430,8 +432,6 @@ class todoScreenState extends State<todoScreen> {
                 // } else {
                 //    print('[buildTaskTree] No valid subtasks found to add for ${task.title}.');
                 }
-            // } else {
-            //     print('[buildTaskTree] Task ${task.title} has no subtasks.');
             }
         }
         // print('[buildTaskTree] Finished depth $depth. Total widgets: ${taskWidgets.length}');
@@ -455,20 +455,43 @@ class todoScreenState extends State<todoScreen> {
 
     // Calculate indentation based on depth
     final double indentation = depth * 30.0; // Adjust multiplier as needed
+    final bool hasSubtasks = task.subtaskIds.isNotEmpty;
+    final bool isExpanded = _expandedTasks[task.id] ?? false;
     // print('[_buildTaskTile] Building tile for: ${task.title} (ID: ${task.id}) at depth $depth with indent $indentation');
 
     return Padding(
       padding: EdgeInsets.only(left: indentation),
       child: ListTile(
-        leading: Checkbox(
-          value: isInstanceCompleted, // Use instance completion status
-          onChanged: (bool? value) {
-            // Only allow checking if it's the actual due date or already completed today
-            // Prevents checking off future recurring instances shown historically
-            if (DateUtils.isSameDay(task.dueDate, _selectedDate) || isInstanceCompleted) {
-                 _updateTaskCompletion(task, value ?? false);
-            }
-          },
+        leading: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (hasSubtasks)
+              IconButton(
+                icon: Icon(isExpanded ? Icons.expand_less : Icons.expand_more),
+                iconSize: 20,
+                padding: EdgeInsets.zero,
+                constraints: BoxConstraints(), // Remove default padding
+                visualDensity: VisualDensity.compact, // Make it tighter
+                onPressed: () {
+                  setState(() {
+                    _expandedTasks[task.id] = !isExpanded;
+                  });
+                },
+              )
+            else
+              SizedBox(width: 24), // Placeholder to align checkboxes (estimated icon width)
+            Checkbox(
+              value: isInstanceCompleted, // Use instance completion status
+              onChanged: (bool? value) {
+                // Only allow checking if it's the actual due date or already completed today
+                // Prevents checking off future recurring instances shown historically
+                if (DateUtils.isSameDay(task.dueDate, _selectedDate) || isInstanceCompleted) {
+                    _updateTaskCompletion(task, value ?? false);
+                }
+              },
+              visualDensity: VisualDensity.compact,
+            ),
+          ],
         ),
         title: Row(
           children: [
@@ -552,7 +575,11 @@ class todoScreenState extends State<todoScreen> {
           final result = await Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (context) => EditTaskScreen(task: task, taskBox: taskBox),
+              builder: (context) => EditTaskScreen(
+                 task: task, 
+                 taskBox: taskBox, 
+                 categoryBox: categoryBox
+              ),
             ),
           );
           // If the edit screen indicated a change, refresh the list

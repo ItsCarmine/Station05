@@ -181,10 +181,10 @@ class _FocusScreenState extends State<FocusScreen> {
               },
             ),
             // Optional: Cancel button if you want to allow backing out
-            // TextButton(
-            //   child: Text('Cancel'),
-            //   onPressed: () => Navigator.of(context).pop(null), // Or pop the screen
-            // ),
+            TextButton(
+              child: Text('Cancel'),
+              onPressed: () => Navigator.of(context).pop(), // Pop dialog AND screen
+            ),
           ],
         );
       },
@@ -203,7 +203,7 @@ class _FocusScreenState extends State<FocusScreen> {
         }
       });
     } else if (mounted) {
-       // Handle case where dialog is dismissed without selection (e.g., back button)
+       // Handle case where dialog is dismissed without selection (e.g., back button or CANCEL)
        // Pop the focus screen itself if no choice is made
        Navigator.of(context).pop();
     }

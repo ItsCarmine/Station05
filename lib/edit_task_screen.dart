@@ -10,11 +10,13 @@ const List<String> _weekDayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'S
 class EditTaskScreen extends StatefulWidget {
   final Task task;
   final Box<Task> taskBox; // Pass the box for saving/deleting
+  final Box<String> categoryBox; // <-- Add category box
 
   const EditTaskScreen({
     Key? key,
     required this.task,
     required this.taskBox,
+    required this.categoryBox, // <-- Add to constructor
   }) : super(key: key);
 
   @override
@@ -33,6 +35,7 @@ class _EditTaskScreenState extends State<EditTaskScreen> {
   late String _editedRecurrenceType;
   late int _editedRecurrenceInterval;
   late List<int> _editedRecurrenceDaysOfWeek;
+  late String _editedCategory; // <-- Add category state
 
   final _formKey = GlobalKey<FormState>();
 
@@ -48,6 +51,7 @@ class _EditTaskScreenState extends State<EditTaskScreen> {
     _editedRecurrenceType = widget.task.recurrenceType;
     _editedRecurrenceInterval = widget.task.recurrenceInterval;
     _editedRecurrenceDaysOfWeek = List<int>.from(widget.task.recurrenceDaysOfWeek); // Copy list
+    _editedCategory = widget.task.category; // <-- Initialize category state
 
     _titleController = TextEditingController(text: _editedTitle);
     _descriptionController = TextEditingController(text: _editedDescription);
@@ -84,6 +88,7 @@ class _EditTaskScreenState extends State<EditTaskScreen> {
       widget.task.title = _editedTitle;
       widget.task.description = _editedDescription;
       widget.task.dueDate = _editedDueDate;
+      widget.task.category = _editedCategory; // <-- Save edited category
       widget.task.isRecurring = _editedIsRecurring;
       // Only update recurrence details if it's actually recurring
       if (_editedIsRecurring) {
@@ -172,6 +177,13 @@ class _EditTaskScreenState extends State<EditTaskScreen> {
   Widget build(BuildContext context) {
     final bool isSubtask = widget.task.parentId != null;
     final bool hasSubtasks = widget.task.subtaskIds.isNotEmpty; // Check if it has subtasks
+    final List<String> availableCategories = widget.categoryBox.values.toList();
+
+    // Ensure the current task's category is in the list, even if deleted from categoryBox
+    if (!availableCategories.contains(_editedCategory)) {
+      availableCategories.add(_editedCategory);
+      availableCategories.sort(); // Keep it sorted if adding
+    }
 
     return Scaffold(
       appBar: AppBar(
@@ -213,6 +225,28 @@ class _EditTaskScreenState extends State<EditTaskScreen> {
                 onSaved: (value) => _editedDescription = value ?? '',
               ),
               SizedBox(height: 16),
+
+              // --- Category ---
+              DropdownButtonFormField<String>(
+                 value: _editedCategory,
+                 items: availableCategories
+                     .map<DropdownMenuItem<String>>((String value) {
+                     return DropdownMenuItem<String>(
+                         value: value,
+                         child: Text(value),
+                     );
+                 }).toList(),
+                 onChanged: (String? newValue) {
+                     if (newValue != null) {
+                         setState(() {
+                             _editedCategory = newValue;
+                         });
+                     }
+                 },
+                 onSaved: (value) => _editedCategory = value ?? widget.task.category, // Fallback just in case
+                 decoration: InputDecoration(labelText: 'Category'),
+              ),
+              SizedBox(height: 16), // <-- Add space after category dropdown
 
               // --- Due Date ---
               ListTile(

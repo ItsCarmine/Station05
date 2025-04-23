@@ -9,7 +9,7 @@ class Task extends HiveObject {
   final String id;
 
   @HiveField(1)
-  final String category;
+  String category;
 
   @HiveField(2)
   String title;

@@ -4,6 +4,7 @@ import 'goal_model.dart';
 import 'task_model.dart'; // <-- No longer needed for totalSecondsFocused
 import 'focus_log_model.dart'; // <-- Import Log model
 import 'main.dart'; // For box names
+import 'package:intl/intl.dart';
 
 // Helper function to get the start of the current week (Monday)
 DateTime _getStartOfWeek(DateTime date) {
@@ -34,22 +35,59 @@ class GoalsScreen extends StatefulWidget {
 class _GoalsScreenState extends State<GoalsScreen> {
   late Box<Goal> goalBox;
   late Box<String> categoryBox;
-  late Box<FocusSessionLog> logBox; // <-- Add logBox instance variable
+  late Box<FocusSessionLog> logBox;
+
+  late DateTime _displayWeekStart; // <-- Add state for displayed week
 
   @override
   void initState() {
     super.initState();
     goalBox = Hive.box<Goal>(goalBoxName);
     categoryBox = Hive.box<String>(categoryBoxName);
-    logBox = Hive.box<FocusSessionLog>(focusLogBoxName); // <-- Get logBox
+    logBox = Hive.box<FocusSessionLog>(focusLogBoxName);
+    _displayWeekStart = _getStartOfWeek(DateTime.now()); // <-- Initialize to current week
   }
 
   @override
   Widget build(BuildContext context) {
+    // Determine if the displayed week is the current week
+    final bool isCurrentWeek = _getStartOfWeek(DateTime.now()) == _displayWeekStart;
+    // Calculate the end date for display purposes (Sunday of the displayed week)
+    final displayWeekEnd = _displayWeekStart.add(Duration(days: 6)); 
+
     return Scaffold(
       appBar: AppBar(
-        title: Text("Weekly Goals"),
-        // Add actions later (e.g., Add Goal)
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text("Weekly Goals"),
+            Text(
+              "Week: ${DateFormat.Md().format(_displayWeekStart)} - ${DateFormat.Md().format(displayWeekEnd)}",
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.normal),
+            ),
+          ],
+        ),
+        actions: [
+          IconButton(
+            icon: Icon(Icons.chevron_left),
+            tooltip: 'Previous Week',
+            onPressed: () {
+              setState(() {
+                _displayWeekStart = _displayWeekStart.subtract(Duration(days: 7));
+              });
+            },
+          ),
+          IconButton(
+            icon: Icon(Icons.chevron_right),
+            tooltip: 'Next Week',
+            // Disable if viewing the current week
+            onPressed: isCurrentWeek ? null : () {
+              setState(() {
+                _displayWeekStart = _displayWeekStart.add(Duration(days: 7));
+              });
+            },
+          ),
+        ],
       ),
       body: ValueListenableBuilder(
         valueListenable: goalBox.listenable(),
@@ -57,10 +95,10 @@ class _GoalsScreenState extends State<GoalsScreen> {
           return ValueListenableBuilder(
             valueListenable: logBox.listenable(),
             builder: (context, Box<FocusSessionLog> logBoxSnapshot, _) {
-              // Get current week boundaries
-              final now = DateTime.now();
-              final startOfWeek = _getStartOfWeek(now);
-              final endOfWeek = _getEndOfWeek(now);
+              // Get displayed week boundaries
+              final startOfWeek = _displayWeekStart; // Use state variable
+              // Use the helper to get the end, ensures correct handling across year/month boundaries
+              final endOfWeek = _getEndOfWeek(_displayWeekStart); 
 
               if (goalBoxSnapshot.values.isEmpty) {
                 return Center(
@@ -113,7 +151,8 @@ class _GoalsScreenState extends State<GoalsScreen> {
                         ),
                         SizedBox(height: 4),
                         Text(
-                          "${totalHoursFocusedThisWeek.toStringAsFixed(1)} hours logged this week", 
+                          // Updated text to be more generic
+                          "${totalHoursFocusedThisWeek.toStringAsFixed(1)} hours logged for week", 
                           style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                         ),
                       ],

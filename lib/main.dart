@@ -13,6 +13,7 @@ import 'edit_task_screen.dart'; // Import the new edit screen
 import 'goal_model.dart'; // <-- Import Goal model
 import 'goals_screen.dart'; // <-- Import Goals screen (will create later)
 import 'focus_log_model.dart'; // <-- Import Log model
+import 'log_screen.dart'; // <-- Import Log screen
 
 // Define box names
 const String taskBoxName = 'tasks';
@@ -289,6 +290,18 @@ class todoScreenState extends State<todoScreen> {
                 Navigator.push(
                   context,
                   MaterialPageRoute(builder: (context) => GoalsScreen()), // Pass boxes later
+                );
+              },
+            ),
+            ListTile(
+              leading: Icon(Icons.history), // Example icon
+              title: Text('Log'),
+              onTap: () {
+                Navigator.pop(context); // Close the drawer first
+                // Navigate to the Log Screen
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => LogScreen()), // Pass boxes if needed later
                 );
               },
             ),

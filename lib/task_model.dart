@@ -23,9 +23,6 @@ class Task extends HiveObject {
   @HiveField(5)
   DateTime dueDate;
 
-  @HiveField(6)
-  int totalSecondsFocused;
-
   @HiveField(7)
   bool isRecurring;
 
@@ -58,7 +55,6 @@ class Task extends HiveObject {
     required this.description,
     this.isCompleted = false,
     required this.dueDate,
-    this.totalSecondsFocused = 0,
     this.isRecurring = false,
     this.recurrenceType = 'none',
     this.recurrenceInterval = 1,
@@ -77,7 +73,6 @@ class Task extends HiveObject {
     String? description,
     bool? isCompleted,
     DateTime? dueDate,
-    int? totalSecondsFocused,
     bool? isRecurring,
     String? recurrenceType,
     int? recurrenceInterval,
@@ -94,7 +89,6 @@ class Task extends HiveObject {
       description: description ?? this.description,
       isCompleted: isCompleted ?? this.isCompleted,
       dueDate: dueDate ?? this.dueDate,
-      totalSecondsFocused: totalSecondsFocused ?? this.totalSecondsFocused,
       isRecurring: isRecurring ?? this.isRecurring,
       recurrenceType: recurrenceType ?? this.recurrenceType,
       recurrenceInterval: recurrenceInterval ?? this.recurrenceInterval,

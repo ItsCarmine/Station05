@@ -10,10 +10,15 @@ import 'splash_screen.dart';
 import 'duo_character.dart';
 import 'package:flutter/services.dart'; // Import SystemChrome
 import 'edit_task_screen.dart'; // Import the new edit screen
+import 'goal_model.dart'; // <-- Import Goal model
+import 'goals_screen.dart'; // <-- Import Goals screen (will create later)
+import 'focus_log_model.dart'; // <-- Import Log model
 
 // Define box names
 const String taskBoxName = 'tasks';
 const String categoryBoxName = 'categories';
+const String goalBoxName = 'goals'; // <-- Define Goal box name
+const String focusLogBoxName = 'focus_logs'; // <-- Define Log box name
 
 
 class NoTitle extends StatelessWidget {
@@ -86,19 +91,23 @@ Future<void> main() async { // Make main async
   final appDocumentDir = await getApplicationDocumentsDirectory();
   await Hive.initFlutter(appDocumentDir.path);
 
-  // Register Adapter
+  // Register Adapters
   Hive.registerAdapter(TaskAdapter());
+  Hive.registerAdapter(GoalAdapter()); // <-- Register GoalAdapter
+  Hive.registerAdapter(FocusSessionLogAdapter()); // <-- Register Log adapter
 
-  // Open boxes (now guaranteed to be empty or compatible)
+  // Open boxes
   await Hive.openBox<Task>(taskBoxName);
   await Hive.openBox<String>(categoryBoxName); // Box to store category names
+  await Hive.openBox<Goal>(goalBoxName); // <-- Open Goal box
+  await Hive.openBox<FocusSessionLog>(focusLogBoxName); // <-- Open Log box
 
   runApp(NoTitle());
 }
 
 // --- Move helper function outside class if it doesn't depend on instance state ---
-// Helper to generate unique IDs for tasks (doesn't need instance state)
-String _generateUniqueId() {
+// Helper to generate unique IDs (can be used for logs too)
+String generateUniqueId() {
   return DateTime.now().millisecondsSinceEpoch.toString() + Random().nextInt(1000).toString();
 }
 
@@ -269,6 +278,18 @@ class todoScreenState extends State<todoScreen> {
               title: Text('To Do List'),
               onTap: () {
                 Navigator.pop(context); // Close the drawer
+              },
+            ),
+            ListTile(
+              leading: Icon(Icons.flag_outlined), // Example icon
+              title: Text('Goals'),
+              onTap: () {
+                Navigator.pop(context); // Close the drawer first
+                // Navigate to the Goals Screen
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => GoalsScreen()), // Pass boxes later
+                );
               },
             ),
             ListTile(
@@ -1027,7 +1048,7 @@ class _AddSubtaskDialogContentState extends State<_AddSubtaskDialogContent> {
       _formKey.currentState!.save();
 
       final newSubtask = Task(
-        id: _generateUniqueId(), // Generate unique ID
+        id: generateUniqueId(), // Generate unique ID
         parentId: widget.parentTask.id, // Link to parent
         category: widget.parentTask.category, // Inherit category
         title: subtaskTitle,
@@ -1117,7 +1138,7 @@ class _AddTaskDialogContentState extends State<_AddTaskDialogContent> {
       _formKey.currentState!.save();
 
       final newTask = Task(
-        id: _generateUniqueId(), // Use the top-level function
+        id: generateUniqueId(), // Use the top-level function
         category: widget.category,
         title: taskTitle,
         description: taskDescription,

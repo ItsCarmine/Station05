@@ -23,7 +23,6 @@ class TaskAdapter extends TypeAdapter<Task> {
       description: fields[3] as String,
       isCompleted: fields[4] as bool,
       dueDate: fields[5] as DateTime,
-      totalSecondsFocused: fields[6] as int,
       isRecurring: fields[7] as bool,
       recurrenceType: fields[8] as String,
       recurrenceInterval: fields[9] as int,
@@ -37,7 +36,7 @@ class TaskAdapter extends TypeAdapter<Task> {
   @override
   void write(BinaryWriter writer, Task obj) {
     writer
-      ..writeByte(14)
+      ..writeByte(13)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -50,8 +49,6 @@ class TaskAdapter extends TypeAdapter<Task> {
       ..write(obj.isCompleted)
       ..writeByte(5)
       ..write(obj.dueDate)
-      ..writeByte(6)
-      ..write(obj.totalSecondsFocused)
       ..writeByte(7)
       ..write(obj.isRecurring)
       ..writeByte(8)

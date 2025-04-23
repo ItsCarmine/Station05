@@ -1,6 +1,9 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'task_model.dart';
+import 'focus_log_model.dart';
+import 'package:hive/hive.dart';
+import 'main.dart';
 // import 'package:intl/intl.dart'; // Not strictly needed here anymore
 
 // Enum to represent Pomodoro phases
@@ -35,6 +38,7 @@ class _FocusScreenState extends State<FocusScreen> {
 
   // --- NEW STATE ---
   FocusSessionType? _sessionType; // To store the user's choice
+  DateTime? _sessionStartTime; // <-- Store when the current timed segment started
   int _flowSecondsElapsed = 0; // Stopwatch timer for flow mode
   // ---------------
 
@@ -63,7 +67,7 @@ class _FocusScreenState extends State<FocusScreen> {
     _breakDurationController.dispose();
     // IMPORTANT: Save elapsed time if user backs out while timer was running
     if (_secondsElapsedThisSession > 0) {
-      _saveFocusTime();
+      _saveFocusTime(true);
     }
     super.dispose();
   }
@@ -76,15 +80,19 @@ class _FocusScreenState extends State<FocusScreen> {
       _isTimerRunning = false;
       _isWorkPhase = true;
       _secondsElapsedThisSession = 0; // Reset session counter
+      _sessionStartTime = null; // <-- Reset start time
     });
   }
 
   void _toggleTimer() {
     if (_isTimerRunning) {
       _timer?.cancel();
+      _saveFocusTime(false); // Save progress, but don't reset start time yet
     } else {
       // Ensure we have time remaining
       if (_currentSeconds <= 0) return;
+
+      _sessionStartTime = DateTime.now(); // <-- Record start time
 
       _timer = Timer.periodic(Duration(seconds: 1), (timer) {
         if (_currentSeconds <= 0) {
@@ -109,6 +117,8 @@ class _FocusScreenState extends State<FocusScreen> {
   void _handleTimerCompletion() {
      // Timer finished, switch phase
      _timer?.cancel();
+     _saveFocusTime(true); // Save progress and reset start time
+
      setState(() {
         _isTimerRunning = false;
         _isWorkPhase = !_isWorkPhase; // Toggle between work and break
@@ -120,16 +130,30 @@ class _FocusScreenState extends State<FocusScreen> {
   // Function to end the session and save time
   void _endSession() {
      _timer?.cancel();
-     _saveFocusTime();
-     Navigator.of(context).pop(); // Go back to task list
+     _saveFocusTime(true); // Save final time and reset
+     if (mounted) { // Ensure widget is still mounted before popping
+      Navigator.of(context).pop(); // Go back to task list
+     }
   }
 
-  void _saveFocusTime() {
-     if (_secondsElapsedThisSession > 0 && widget.task.isInBox) { // Check if task is still in Hive box
-        widget.task.totalSecondsFocused += _secondsElapsedThisSession;
-        widget.task.save(); // Save updated task to Hive
-        print("Saved ${_secondsElapsedThisSession} seconds to task ${widget.task.title}");
-        _secondsElapsedThisSession = 0; // Reset after saving
+  void _saveFocusTime(bool resetStartTime) {
+     // Only save if it was a work phase OR flow mode, and time elapsed
+     if (_secondsElapsedThisSession > 0 && (_isWorkPhase || _sessionType == FocusSessionType.flow)) {
+        final logBox = Hive.box<FocusSessionLog>(focusLogBoxName);
+        final logEntry = FocusSessionLog(
+          id: generateUniqueId(),
+          categoryName: widget.task.category,
+          // Use recorded start time, or approximate if unavailable
+          startTime: _sessionStartTime ?? DateTime.now().subtract(Duration(seconds: _secondsElapsedThisSession)),
+          durationSeconds: _secondsElapsedThisSession,
+        );
+        logBox.put(logEntry.id, logEntry);
+        print("Saved log: ${logEntry.durationSeconds}s for ${logEntry.categoryName} starting around ${logEntry.startTime}");
+     }
+     // Reset counter for the next segment
+     _secondsElapsedThisSession = 0; 
+     if(resetStartTime){
+       _sessionStartTime = null; // Reset start time for next phase/session
      }
   }
 
@@ -200,6 +224,7 @@ class _FocusScreenState extends State<FocusScreen> {
           _flowSecondsElapsed = 0;
           _isTimerRunning = false;
           _timer?.cancel(); // Ensure no previous timer is running
+          _sessionStartTime = null; // <-- Reset start time
         }
       });
     } else if (mounted) {
@@ -382,8 +407,10 @@ class _FocusScreenState extends State<FocusScreen> {
       setState(() {
          if (_isTimerRunning) {
             _timer?.cancel(); // Pause the timer
+            _saveFocusTime(false); // Save progress, don't reset start time
          } else {
             // Start the timer
+            _sessionStartTime ??= DateTime.now(); // Record start time if not already set
             _timer = Timer.periodic(Duration(seconds: 1), (timer) {
                if (!mounted) { // Check if widget is still mounted
                   timer.cancel();

@@ -4,7 +4,8 @@ import 'package:fl_chart/fl_chart.dart'; // Import fl_chart
 import 'dart:math'; // For random colors
 
 import 'task_model.dart';
-import 'main.dart'; // Import to access taskBoxName
+import 'focus_log_model.dart'; // <-- Import Log Model
+import 'main.dart'; // Import to access boxNames
 
 class StatisticsScreen extends StatefulWidget {
   const StatisticsScreen({Key? key}) : super(key: key);
@@ -28,27 +29,25 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
 
   // Combined method to calculate times and assign persistent colors
   void _calculateFocusTimesAndAssignColors() {
-    final Box<Task> taskBox = Hive.box<Task>(taskBoxName);
-    final allTasks = taskBox.values;
+    final Box<FocusSessionLog> logBox = Hive.box<FocusSessionLog>(focusLogBoxName);
+    final allLogs = logBox.values;
     categoryFocusTime.clear();
     totalFocusSeconds = 0;
     // Temporary set to keep track of categories encountered in this calculation
     Set<String> currentCategories = {}; 
 
-    for (var task in allTasks) {
-      if (task.totalSecondsFocused > 0) {
-         currentCategories.add(task.category);
-        categoryFocusTime.update(
-          task.category,
-          (value) => value + task.totalSecondsFocused,
-          ifAbsent: () => task.totalSecondsFocused.toDouble(),
-        );
-        totalFocusSeconds += task.totalSecondsFocused;
+    for (var log in allLogs) {
+      currentCategories.add(log.categoryName);
+      categoryFocusTime.update(
+        log.categoryName,
+        (value) => value + log.durationSeconds,
+        ifAbsent: () => log.durationSeconds.toDouble(),
+      );
+      totalFocusSeconds += log.durationSeconds;
 
-        // Assign color only if category is new and doesn't have one
-        if (!_categoryColors.containsKey(task.category)) {
-           _categoryColors[task.category] = _getRandomColor();
-        }
+      // Assign color only if category is new and doesn't have one
+      if (!_categoryColors.containsKey(log.categoryName)) {
+          _categoryColors[log.categoryName] = _getRandomColor();
       }
     }
     // Optional: Remove colors for categories that no longer exist (if needed)
@@ -78,11 +77,12 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // --- Recalculate data on build --- 
-    // This ensures chart updates if underlying data changes while screen is open.
-    // Color assignment stability is handled by _categoryColors map.
+    // --- Recalculate Focus Times --- 
+    // Calculation based on logs needs to happen here or be triggered by ValueListenableBuilder
+    // For simplicity on build for now:
     _calculateFocusTimesAndAssignColors();
 
+    // --- Calculate Task Stats (Still need Task Box) ---
     final Box<Task> taskBox = Hive.box<Task>(taskBoxName);
     final allTasks = taskBox.values.toList();
     final totalTasks = allTasks.length;

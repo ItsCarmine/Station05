@@ -21,7 +21,26 @@ const String categoryBoxName = 'categories';
 const String goalBoxName = 'goals'; // <-- Define Goal box name
 const String focusLogBoxName = 'focus_logs'; // <-- Define Log box name
 
+// Note from j, if you see two asterisks around a word in a comment like *word*, that just means bold for emphasis.
 
+// This class extends StatelessWidget. A *stateless* widget never stores its own changing data, it is not mutable. 
+// All the values it needs, text strings, booleans, numbers, are passed in when its built. When those values change, 
+// Flutter simply throws this instance away and builds a brand new one. It is just a function that goes from *data* 
+// to *UI*. Most of the UI in our app is so simple it doesn't need to store internal data. Like our tasks just need 
+// to call for the task title, task descrition, date, etc, and this is fairly common for UI, so they have a simple widget,
+// a stateless widget. A *stateful* widget is only needed when the widget itself must remember something between builds (lookup what 
+// a build is yourself, its too complicated for me to explain in this already long message): stuff that might need to be rememberd 
+// like an animation controller, a text-field cursor position, or whether a dropdown menu is open.
+// For more clarity: A state is any data that can change while the app is running: an int that counts remaining tasks, a bool 
+// that tracks dark-mode, a list of Task objects, etc. The key design choice is *where* that data lives:
+//     –  inside a *StatefulWidget* (local, its in itself)
+//     –  in a higher widget and passed down (not local, outside of itself)
+//     –  in a global store such as Provider, Riverpod, Bloc, etc (thanks chat for this info, idk what these are)
+// Stateless vs Stateful has no real speed difference for our use-cases (at its most complex we are showing a pi chart). 
+// Both rebuild whenever their inputs change; the only question is who owns the changing data.
+// TL;DR Use StatelessWidget unless the widget truly needs to hold its own mutable state. That keeps components simple, 
+// testable, and easy to reuse. Also, I will try to keep these shorter in the future, I just had no idea what most of these words were
+// an hour ago so I explained all of em' – j
 class NoTitle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {

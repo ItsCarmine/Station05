@@ -39,6 +39,9 @@ dependencies:
   hive_flutter: ^1.1.0
   path_provider: ^2.1.5
   fl_chart: ^0.70.2
+  flutter_local_notifications: ^19.1.0
+  flutter_local_notifications_linux: ^6.0.0
+  permission_handler: ^12.0.0+1
 
 dev_dependencies:
   flutter_test:

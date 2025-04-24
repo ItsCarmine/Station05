@@ -14,6 +14,7 @@ import 'goal_model.dart'; // <-- Import Goal model
 import 'goals_screen.dart'; // <-- Import Goals screen (will create later)
 import 'focus_log_model.dart'; // <-- Import Log model
 import 'log_screen.dart'; // <-- Import Log screen
+import 'notification.dart'; // <-- Import Notification service
 
 // Define box names
 const String taskBoxName = 'tasks';
@@ -122,8 +123,16 @@ Future<void> main() async { // Make main async
   await Hive.openBox<Goal>(goalBoxName); // <-- Open Goal box
   await Hive.openBox<FocusSessionLog>(focusLogBoxName); // <-- Open Log box
 
+  await NotificationService().init(); // Initialize notification service
+
+  // --- Show a test notification on app boot ---
+  NotificationService().showNotification(id: 114, title: "TestNotification", body: "App Booted!");
+
+
   runApp(NoTitle());
 }
+
+
 
 // --- Move helper function outside class if it doesn't depend on instance state ---
 // Helper to generate unique IDs (can be used for logs too)

@@ -875,6 +875,10 @@ class todoScreenState extends State<todoScreen> {
 
   // Helper method to show the add task dialog
   void _showAddTaskDialog(BuildContext context, String category) {
+    // --- Create a GlobalKey for the dialog content state ---
+    final GlobalKey<_AddTaskDialogContentState> _dialogContentKey = GlobalKey<_AddTaskDialogContentState>();
+    // --------------------------------------------------------
+
     showDialog(
       context: context,
       builder: (BuildContext context) {
@@ -883,6 +887,7 @@ class todoScreenState extends State<todoScreen> {
           title: Text("Add New Task to $category"),
           // Use a dedicated StatefulWidget for the content and state management
           content: _AddTaskDialogContent(
+            key: _dialogContentKey, // --- Assign the key ---
             category: category,
             initialDueDate: _selectedDate,
             onTaskAdded: (newTask) async { // Make async
@@ -909,7 +914,15 @@ class todoScreenState extends State<todoScreen> {
               onPressed: () => Navigator.of(context).pop(),
               child: Text("Cancel"),
             ),
-            // The "Add Task" button logic is now inside _AddTaskDialogContent
+            // --- Add the "Add Task" button here ---
+            TextButton(
+              onPressed: () {
+                // Access the state via the key and call _addTask
+                _dialogContentKey.currentState?._addTask();
+              },
+              child: Text("Add Task"),
+            ),
+            // --------------------------------------
           ],
         );
       },
@@ -1241,11 +1254,6 @@ class _AddTaskDialogContentState extends State<_AddTaskDialogContent> {
                 ),
               ],
             ),
-            SizedBox(height: 20),
-            ElevatedButton(
-                onPressed: _addTask, // Call the internal add task method
-                child: Text("Add Task"),
-            )
           ],
         ),
       ),

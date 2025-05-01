@@ -110,7 +110,7 @@ class _EditTaskScreenState extends State<EditTaskScreen> {
 
       Navigator.pop(context, true); // Pop screen and indicate save happened
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Task "${widget.task.title}" updated.')),
+        SnackBar(content: Text('Task "${widget.task.title.substring(0, 15)}" updated.')),
       );
     }
   }

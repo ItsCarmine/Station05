@@ -286,7 +286,10 @@ class todoScreenState extends State<todoScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Color(0xFFF9F5F1),  // Using the hex color #F9F5F1
       appBar: AppBar(
+        backgroundColor: Color(0xFFF9F5F1), // Match body background
+        elevation: 0, // Remove shadow for seamless look
         title: Column(
           children: [
             Text("To Do List", style: TextStyle(fontSize: 22)),
@@ -308,13 +311,14 @@ class todoScreenState extends State<todoScreen> {
         ],
       ),
       drawer: Drawer(
+        backgroundColor: Color(0xFFDDD9E3), // Set your custom color here
         child: ListView(
           padding: EdgeInsets.zero,
           children: [
             SizedBox(height: 20.0),
             ListTile(
               leading: Icon(Icons.list),
-              title: Text('To Do List'),
+              title: Text(''),
               onTap: () {
                 Navigator.pop(context); // Close the drawer
               },
@@ -532,160 +536,168 @@ class todoScreenState extends State<todoScreen> {
     // print('[_buildTaskTile] Building tile for: ${task.title} (ID: ${task.id}) at depth $depth with indent $indentation');
 
     return Padding(
-      padding: EdgeInsets.only(left: indentation),
-      child: ListTile(
-        leading: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (hasSubtasks)
-              IconButton(
-                icon: Icon(isExpanded ? Icons.expand_less : Icons.expand_more),
-                iconSize: 20,
-                padding: EdgeInsets.zero,
-                constraints: BoxConstraints(), // Remove default padding
-                visualDensity: VisualDensity.compact, // Make it tighter
-                onPressed: () {
-                  setState(() {
-                    _expandedTasks[task.id] = !isExpanded;
-                  });
-                },
-              )
-            else
-              SizedBox(width: 24), // Placeholder to align checkboxes (estimated icon width)
-            Checkbox(
-              value: isInstanceCompleted, // Use instance completion status
-              onChanged: (bool? value) {
-                // Only allow checking if it's the actual due date or already completed today
-                // Prevents checking off future recurring instances shown historically
-                if (DateUtils.isSameDay(task.dueDate, _selectedDate) || isInstanceCompleted) {
-                    _updateTaskCompletion(task, value ?? false);
-                }
-              },
-              visualDensity: VisualDensity.compact,
-            ),
-          ],
-        ),
-        title: Row(
-          children: [
-            Flexible(
-              child: Text(
-                task.title,
-                maxLines: 1, // Limit title to 1 line
-                overflow: TextOverflow.ellipsis, // Add ellipsis if overflow
-                style: TextStyle(
-                  // Apply strikethrough based on instance completion
-                  decoration: isInstanceCompleted ? TextDecoration.lineThrough : null,
+      padding: EdgeInsets.only(left: indentation, top: 6, right: 8, bottom: 6),
+      child: Card(
+        color: Color(0xFFF9F7F3), // Subtle contrast
+        elevation: 2,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        child: Padding(
+          padding: EdgeInsets.all(8),
+          child: ListTile(
+            leading: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (hasSubtasks)
+                  IconButton(
+                    icon: Icon(isExpanded ? Icons.expand_less : Icons.expand_more),
+                    iconSize: 20,
+                    padding: EdgeInsets.zero,
+                    constraints: BoxConstraints(), // Remove default padding
+                    visualDensity: VisualDensity.compact, // Make it tighter
+                    onPressed: () {
+                      setState(() {
+                        _expandedTasks[task.id] = !isExpanded;
+                      });
+                    },
+                  )
+                else
+                  SizedBox(width: 24), // Placeholder to align checkboxes (estimated icon width)
+                Checkbox(
+                  value: isInstanceCompleted, // Use instance completion status
+                  onChanged: (bool? value) {
+                    // Only allow checking if it's the actual due date or already completed today
+                    // Prevents checking off future recurring instances shown historically
+                    if (DateUtils.isSameDay(task.dueDate, _selectedDate) || isInstanceCompleted) {
+                        _updateTaskCompletion(task, value ?? false);
+                    }
+                  },
+                  visualDensity: VisualDensity.compact,
                 ),
-              ),
+              ],
             ),
-            if (task.isRecurring)
-              Padding(
-                padding: const EdgeInsets.only(left: 8.0),
-                child: Icon(Icons.repeat, size: 16, color: Colors.grey),
-              ),
-          ],
-        ),
-        subtitle: task.description.isNotEmpty 
-          ? Text(
-              task.description, 
-              maxLines: 2, // Limit description to 2 lines
-              overflow: TextOverflow.ellipsis, // Add ellipsis if overflow
-            )
-          : null, // Hide subtitle if empty
-        trailing: Row(
-           mainAxisSize: MainAxisSize.min,
-           children: [
-              SizedBox( // Wrap with SizedBox for max width
-                width: 60, // Set a max width (adjust as needed)
-                child: Text(
-                  task.category, 
-                  style: TextStyle(color: Colors.grey, fontSize: 12),
-                  maxLines: 1, // Limit to 1 line
-                  overflow: TextOverflow.ellipsis, // Add ellipsis
-                  softWrap: false, // Prevent wrapping before ellipsis
-                ),
-              ),
-              SizedBox(width: 4),
-              // --- Add Subtask Button ---
-              IconButton(
-                 icon: Icon(Icons.add_circle_outline, size: 20, color: Colors.green),
-                 tooltip: 'Add Subtask',
-                 onPressed: () {
-                   _showAddSubtaskDialog(context, task); // Pass parent task
-                 },
-                 padding: EdgeInsets.zero,
-                 constraints: BoxConstraints(), // Remove default padding
-              ),
-              // -------------------------
-              SizedBox(width: 4), // Spacing
-              Material(
-                 type: MaterialType.transparency,
-                 child: InkWell(
-                    borderRadius: BorderRadius.circular(20),
-                    onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                             builder: (context) => FocusScreen(task: task),
-                          ),
-                        );
-                     },
-                     child: Padding(
-                       padding: const EdgeInsets.all(8.0),
-                       child: Icon(
-                         Icons.center_focus_strong,
-                         size: 24,
-                         color: Colors.blueAccent,
-                       ),
-                     ),
+            title: Row(
+              children: [
+                Flexible(
+                  child: Text(
+                    task.title,
+                    maxLines: 1, // Limit title to 1 line
+                    overflow: TextOverflow.ellipsis, // Add ellipsis if overflow
+                    style: TextStyle(
+                      // Apply strikethrough based on instance completion
+                      decoration: isInstanceCompleted ? TextDecoration.lineThrough : null,
+                    ),
                   ),
-              ),
-           ]
-        ),
-        onTap: () async { // Make async to handle potential refresh
-          // Navigate and wait for a potential result (e.g., true if saved/deleted)
-          final result = await Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => EditTaskScreen(
-                 task: task, 
-                 taskBox: taskBox, 
-                 categoryBox: categoryBox
-              ),
+                ),
+                if (task.isRecurring)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 8.0),
+                    child: Icon(Icons.repeat, size: 16, color: Colors.grey),
+                  ),
+              ],
             ),
-          );
-          // If the edit screen indicated a change, refresh the list
-          if (result == true && mounted) { 
-            setState(() {
-              // Could potentially optimize by only reloading if necessary
-              _loadTasksAndCategories(); 
-            });
-          }
-        },
-         onLongPress: () {
-            showDialog(
-                context: context,
-                builder: (BuildContext ctx) {
-                   return AlertDialog(
-                      title: Text('Delete Task'),
-                      content: Text('Are you sure you want to delete "${task.title}"? This will also delete its subtasks.'),
-                      actions: [
-                         TextButton(
-                            onPressed: () => Navigator.of(ctx).pop(),
-                            child: Text('Cancel'),
+            subtitle: task.description.isNotEmpty 
+              ? Text(
+                  task.description, 
+                  maxLines: 2, // Limit description to 2 lines
+                  overflow: TextOverflow.ellipsis, // Add ellipsis if overflow
+                )
+              : null, // Hide subtitle if empty
+            trailing: Row(
+               mainAxisSize: MainAxisSize.min,
+               children: [
+                  SizedBox( // Wrap with SizedBox for max width
+                    width: 60, // Set a max width (adjust as needed)
+                    child: Text(
+                      task.category, 
+                      style: TextStyle(color: Colors.grey, fontSize: 12),
+                      maxLines: 1, // Limit to 1 line
+                      overflow: TextOverflow.ellipsis, // Add ellipsis
+                      softWrap: false, // Prevent wrapping before ellipsis
+                    ),
+                  ),
+                  SizedBox(width: 4),
+                  // --- Add Subtask Button ---
+                  IconButton(
+                     icon: Icon(Icons.add_circle_outline, size: 20, color: Colors.green),
+                     tooltip: 'Add Subtask',
+                     onPressed: () {
+                       _showAddSubtaskDialog(context, task); // Pass parent task
+                     },
+                     padding: EdgeInsets.zero,
+                     constraints: BoxConstraints(), // Remove default padding
+                  ),
+                  // -------------------------
+                  SizedBox(width: 4), // Spacing
+                  Material(
+                     type: MaterialType.transparency,
+                     child: InkWell(
+                        borderRadius: BorderRadius.circular(20),
+                        onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                 builder: (context) => FocusScreen(task: task),
+                              ),
+                            );
+                         },
+                         child: Padding(
+                           padding: const EdgeInsets.all(8.0),
+                           child: Icon(
+                             Icons.center_focus_strong,
+                             size: 24,
+                             color: Colors.blueAccent,
+                           ),
                          ),
-                         TextButton(
-                            onPressed: () {
-                               _deleteTask(task); // Updated delete function needed
-                               Navigator.of(ctx).pop();
-                            },
-                            child: Text('Delete', style: TextStyle(color: Colors.red)),
-                         ),
-                      ],
-                   );
-                },
-            );
-         },
+                      ),
+                  ),
+               ]
+            ),
+            onTap: () async { // Make async to handle potential refresh
+              // Navigate and wait for a potential result (e.g., true if saved/deleted)
+              final result = await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => EditTaskScreen(
+                     task: task, 
+                     taskBox: taskBox, 
+                     categoryBox: categoryBox
+                  ),
+                ),
+              );
+              // If the edit screen indicated a change, refresh the list
+              if (result == true && mounted) { 
+                setState(() {
+                  // Could potentially optimize by only reloading if necessary
+                  _loadTasksAndCategories(); 
+                });
+              }
+            },
+             onLongPress: () {
+                showDialog(
+                    context: context,
+                    builder: (BuildContext ctx) {
+                       return AlertDialog(
+                          title: Text('Delete Task'),
+                          content: Text('Are you sure you want to delete "${task.title}"? This will also delete its subtasks.'),
+                          actions: [
+                             TextButton(
+                                onPressed: () => Navigator.of(ctx).pop(),
+                                child: Text('Cancel'),
+                             ),
+                             TextButton(
+                                onPressed: () {
+                                   _deleteTask(task); // Updated delete function needed
+                                   Navigator.of(ctx).pop();
+                                },
+                                child: Text('Delete', style: TextStyle(color: Colors.red)),
+                             ),
+                          ],
+                       );
+                    },
+                );
+             },
+          ),
+        ),
       ),
     );
   }

@@ -21,16 +21,22 @@ class TaskAdapter extends TypeAdapter<Task> {
       category: fields[1] as String,
       title: fields[2] as String,
       description: fields[3] as String,
-      dueDate: fields[4] as DateTime,
-      isCompleted: fields[5] as bool,
-      totalSecondsFocused: fields[6] as int,
+      isCompleted: fields[4] as bool,
+      dueDate: fields[5] as DateTime,
+      isRecurring: fields[7] as bool,
+      recurrenceType: fields[8] as String,
+      recurrenceInterval: fields[9] as int,
+      completionDates: (fields[10] as List?)?.cast<DateTime>(),
+      parentId: fields[11] as String?,
+      subtaskIds: (fields[12] as List?)?.cast<String>(),
+      recurrenceDaysOfWeek: (fields[13] as List?)?.cast<int>(),
     );
   }
 
   @override
   void write(BinaryWriter writer, Task obj) {
     writer
-      ..writeByte(7)
+      ..writeByte(13)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -40,11 +46,23 @@ class TaskAdapter extends TypeAdapter<Task> {
       ..writeByte(3)
       ..write(obj.description)
       ..writeByte(4)
-      ..write(obj.dueDate)
-      ..writeByte(5)
       ..write(obj.isCompleted)
-      ..writeByte(6)
-      ..write(obj.totalSecondsFocused);
+      ..writeByte(5)
+      ..write(obj.dueDate)
+      ..writeByte(7)
+      ..write(obj.isRecurring)
+      ..writeByte(8)
+      ..write(obj.recurrenceType)
+      ..writeByte(9)
+      ..write(obj.recurrenceInterval)
+      ..writeByte(10)
+      ..write(obj.completionDates)
+      ..writeByte(11)
+      ..write(obj.parentId)
+      ..writeByte(12)
+      ..write(obj.subtaskIds)
+      ..writeByte(13)
+      ..write(obj.recurrenceDaysOfWeek);
   }
 
   @override

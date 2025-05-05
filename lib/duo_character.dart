@@ -6,11 +6,11 @@ class DuoCharacter extends StatefulWidget {
   final bool shouldAnimateSmile; // New property
 
   const DuoCharacter({
-    Key? key,
+    super.key,
     this.size = 100,
     this.isJumping = false,
     this.shouldAnimateSmile = false, // Default to false
-  }) : super(key: key);
+  });
 
   @override
   _DuoCharacterState createState() => _DuoCharacterState();

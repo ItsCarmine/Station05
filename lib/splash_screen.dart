@@ -4,7 +4,7 @@ import 'duo_character.dart';
 class SplashScreen extends StatefulWidget {
   final VoidCallback onAnimationComplete;
 
-  const SplashScreen({Key? key, required this.onAnimationComplete}) : super(key: key);
+  const SplashScreen({super.key, required this.onAnimationComplete});
 
   @override
   _SplashScreenState createState() => _SplashScreenState();

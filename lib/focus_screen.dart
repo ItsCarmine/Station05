@@ -4,8 +4,10 @@ import 'task_model.dart';
 import 'focus_log_model.dart';
 import 'package:hive/hive.dart';
 import 'main.dart';
+import 'deep_focus_mode.dart';
 // import 'package:intl/intl.dart'; // Not strictly needed here anymore
-
+// Add a new state variable in _FocusScreenState class
+bool _deepFocusEnabled = false;
 // Enum to represent Pomodoro phases
 enum PomodoroPhase { work, shortBreak, longBreak }
 
@@ -15,7 +17,7 @@ enum FocusSessionType { pomodoro, flow }
 class FocusScreen extends StatefulWidget {
   final Task task;
 
-  const FocusScreen({Key? key, required this.task}) : super(key: key);
+  const FocusScreen({super.key, required this.task});
 
   @override
   _FocusScreenState createState() => _FocusScreenState();
@@ -182,57 +184,128 @@ class _FocusScreenState extends State<FocusScreen> {
       }
    }
 
+
+  // Add this method to start Deep Focus Mode
+  void _startDeepFocusMode() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => DeepFocusMode(
+          duration: _workDurationMinutes,
+          onComplete: () {
+            // Mark task as completed 
+            if (widget.task.isRecurring) {
+              // For recurring tasks, mark this instance completed
+              if (!widget.task.completionDates.any((date) => DateUtils.isSameDay(date, DateTime.now()))) {
+                widget.task.completionDates.add(DateTime.now());
+                widget.task.save();
+              }
+            } else {
+              // For regular tasks, mark as completed
+              widget.task.isCompleted = true;
+              widget.task.save();
+            }
+            
+            // Navigate back to task list
+            Navigator.of(context).popUntil((route) => route.isFirst);
+            
+            // Show success message
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Task completed successfully!'), backgroundColor: Colors.green),
+            );
+          },
+          onFail: () {
+            // Mark task as failed (not completed)
+            
+            // Navigate back to task list
+            Navigator.of(context).popUntil((route) => route.isFirst);
+            
+            // Show failure message
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Task failed. You exited Deep Focus Mode.'), backgroundColor: Colors.red),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
   // --- NEW: Show Session Type Selection Dialog ---
   Future<void> _showSessionTypeDialog() async {
-    final selectedType = await showDialog<FocusSessionType>(
-      context: context,
-      barrierDismissible: false, // User must choose
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: Text('Choose Focus Session Type'),
-          content: Text('Select how you want to focus on "${widget.task.title}".'),
-          actions: <Widget>[
-            TextButton(
-              child: Text('Pomodoro'),
-              onPressed: () {
-                Navigator.of(context).pop(FocusSessionType.pomodoro);
-              },
-            ),
-            TextButton(
-              child: Text('Flow (Stopwatch)'),
-              onPressed: () {
-                Navigator.of(context).pop(FocusSessionType.flow);
-              },
-            ),
-            // Optional: Cancel button if you want to allow backing out
-            TextButton(
-              child: Text('Cancel'),
-              onPressed: () => Navigator.of(context).pop(), // Pop dialog AND screen
-            ),
-          ],
-        );
-      },
-    );
+  final selectedType = await showDialog<dynamic>(
+    context: context,
+    barrierDismissible: false, // User must choose
+    builder: (BuildContext context) {
+      return AlertDialog(
+        title: Text('Choose Focus Session Type'),
+        content: Text('Select how you want to focus on "${widget.task.title}".'),
+        actions: <Widget>[
+          // Add Deep Focus option
+          TextButton(
+            child: Text('Deep Focus Pomodoro'),
+            onPressed: () {
+              Navigator.of(context).pop({
+                'type': FocusSessionType.pomodoro,
+                'deepFocus': true,
+              });
+            },
+          ),
+          // Regular Pomodoro
+          TextButton(
+            child: Text('Regular Pomodoro'),
+            onPressed: () {
+              Navigator.of(context).pop({
+                'type': FocusSessionType.pomodoro,
+                'deepFocus': false,
+              });
+            },
+          ),
+          TextButton(
+            child: Text('Flow (Stopwatch)'),
+            onPressed: () {
+              Navigator.of(context).pop({
+                'type': FocusSessionType.flow,
+                'deepFocus': false,
+              });
+            },
+          ),
+          TextButton(
+            child: Text('Cancel'),
+            onPressed: () => Navigator.of(context).pop(), 
+          ),
+        ],
+      );
+    },
+  );
 
-    if (selectedType != null && mounted) { // Check if mounted after async gap
-      setState(() {
+  if (selectedType != null && mounted) {
+    setState(() {
+      if (selectedType is Map) {
+        _sessionType = selectedType['type'];
+        _deepFocusEnabled = selectedType['deepFocus'] ?? false;
+      } else {
         _sessionType = selectedType;
-        if (_sessionType == FocusSessionType.pomodoro) {
-          _resetTimer(); // Initialize Pomodoro timer
-        } else {
-          // Initialize Flow timer state (starts at 0, not running)
-          _flowSecondsElapsed = 0;
-          _isTimerRunning = false;
-          _timer?.cancel(); // Ensure no previous timer is running
-          _sessionStartTime = null; // <-- Reset start time
-        }
-      });
-    } else if (mounted) {
-       // Handle case where dialog is dismissed without selection (e.g., back button or CANCEL)
-       // Pop the focus screen itself if no choice is made
-       Navigator.of(context).pop();
+        _deepFocusEnabled = false;
+      }
+
+      if (_sessionType == FocusSessionType.pomodoro) {
+        _resetTimer();
+      } else {
+        _flowSecondsElapsed = 0;
+        _isTimerRunning = false;
+        _timer?.cancel();
+        _sessionStartTime = null;
+      }
+    });
+
+    // If deep focus mode is enabled, start it
+    if (_deepFocusEnabled && _sessionType == FocusSessionType.pomodoro) {
+      _startDeepFocusMode();
     }
+  } else if (mounted) {
+    Navigator.of(context).pop();
   }
+}
   // -------------------------------------------
 
   @override

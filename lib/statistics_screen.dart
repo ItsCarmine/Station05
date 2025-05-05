@@ -8,7 +8,7 @@ import 'focus_log_model.dart'; // <-- Import Log Model
 import 'main.dart'; // Import to access boxNames
 
 class StatisticsScreen extends StatefulWidget {
-  const StatisticsScreen({Key? key}) : super(key: key);
+  const StatisticsScreen({super.key});
 
   @override
   State<StatisticsScreen> createState() => _StatisticsScreenState();
@@ -18,7 +18,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   int touchedIndex = -1; // For Pie Chart interaction
   Map<String, double> categoryFocusTime = {};
   double totalFocusSeconds = 0;
-  Map<String, Color> _categoryColors = {}; // Store category colors here
+  final Map<String, Color> _categoryColors = {}; // Store category colors here
 
   @override
   void initState() {

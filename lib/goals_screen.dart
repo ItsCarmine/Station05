@@ -26,7 +26,7 @@ DateTime _getEndOfWeek(DateTime date) {
 }
 
 class GoalsScreen extends StatefulWidget {
-  const GoalsScreen({Key? key}) : super(key: key);
+  const GoalsScreen({super.key});
 
   @override
   _GoalsScreenState createState() => _GoalsScreenState();
@@ -171,9 +171,9 @@ class _GoalsScreenState extends State<GoalsScreen> {
         },
       ),
       floatingActionButton: FloatingActionButton(
-        child: Icon(Icons.add),
         tooltip: 'Add New Goal',
         onPressed: () => _showAddGoalDialog(context),
+        child: Icon(Icons.add),
       ),
     );
   }
@@ -267,10 +267,10 @@ class _AddGoalDialogContent extends StatefulWidget {
   final Function(String category, double hours) onGoalAdded;
 
   const _AddGoalDialogContent({
-    Key? key,
+    super.key,
     required this.availableCategories,
     required this.onGoalAdded,
-  }) : super(key: key);
+  });
 
   @override
   _AddGoalDialogContentState createState() => _AddGoalDialogContentState();

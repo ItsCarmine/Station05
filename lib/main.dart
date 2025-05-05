@@ -21,7 +21,7 @@ const String taskBoxName = 'tasks';
 const String categoryBoxName = 'categories';
 const String goalBoxName = 'goals'; // <-- Define Goal box name
 const String focusLogBoxName = 'focus_logs'; // <-- Define Log box name
-
+const platform = MethodChannel('com.station5.station5/deepfocus');
 // Note from j, if you see two asterisks around a word in a comment like *word*, that just means bold for emphasis.
 
 // This class extends StatelessWidget. A *stateless* widget never stores its own changing data, it is not mutable. 
@@ -43,6 +43,8 @@ const String focusLogBoxName = 'focus_logs'; // <-- Define Log box name
 // testable, and easy to reuse. Also, I will try to keep these shorter in the future, I just had no idea what most of these words were
 // an hour ago so I explained all of em' – j
 class NoTitle extends StatelessWidget {
+  const NoTitle({super.key});
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -53,6 +55,8 @@ class NoTitle extends StatelessWidget {
 }
 
 class SplashToAppWrapper extends StatefulWidget {
+  const SplashToAppWrapper({super.key});
+
   @override
   _SplashToAppWrapperState createState() => _SplashToAppWrapperState();
 }
@@ -148,6 +152,8 @@ String generateUniqueId() {
 // }
 
 class todoScreen extends StatefulWidget {
+  const todoScreen({super.key});
+
   @override
   todoScreenState createState() => todoScreenState();
 }
@@ -162,7 +168,7 @@ class todoScreenState extends State<todoScreen> {
 
   // Keep the map for easy access in UI, but populate from Hive
   Map<String, List<Task>> tasksByCategory = {};
-  Map<String, bool> _expandedTasks = {};
+  final Map<String, bool> _expandedTasks = {};
 
   @override
   void initState() {
@@ -417,7 +423,7 @@ class todoScreenState extends State<todoScreen> {
                       foregroundColor: isSelected ? Colors.white : Colors.black,
                       padding: EdgeInsets.symmetric(horizontal: 4, vertical: 4),
                       shape: CircleBorder(),
-                    ).copyWith(elevation: MaterialStateProperty.all(isSelected ? 4 : 1)),
+                    ).copyWith(elevation: WidgetStateProperty.all(isSelected ? 4 : 1)),
                     onPressed: () => setState(() {
                       _selectedDate = day;
                       _focusedDate = day;
@@ -446,7 +452,7 @@ class todoScreenState extends State<todoScreen> {
               ),
             ),
           );
-        }).toList(),
+        }),
       ],
     );
   }
@@ -746,7 +752,7 @@ class todoScreenState extends State<todoScreen> {
       builder: (BuildContext context) {
         return AlertDialog(
           title: Text("Select or Create Category"),
-          content: Container(
+          content: SizedBox(
             width: double.maxFinite,
             // Use ListView for better scrolling if categories grow
             child: ListView(
@@ -769,7 +775,7 @@ class todoScreenState extends State<todoScreen> {
                     },
                   ),
                   contentPadding: EdgeInsets.symmetric(horizontal: 8.0), // Adjust padding
-                )).toList(), // Convert map result to list
+                )), // Convert map result to list
                 // ---------------------------------------------
                 SizedBox(height: 10),
                 // --- Create New Category Button ---
@@ -1070,10 +1076,10 @@ class _AddSubtaskDialogContent extends StatefulWidget {
   final Function(Task) onSubtaskAdded;
 
   const _AddSubtaskDialogContent({
-    Key? key,
+    super.key,
     required this.parentTask,
     required this.onSubtaskAdded,
-  }) : super(key: key);
+  });
 
   @override
   _AddSubtaskDialogContentState createState() => _AddSubtaskDialogContentState();
@@ -1147,11 +1153,11 @@ class _AddTaskDialogContent extends StatefulWidget {
   final Function(Task) onTaskAdded; // Callback to add task
 
   const _AddTaskDialogContent({
-    Key? key,
+    super.key,
     required this.category,
     required this.initialDueDate,
     required this.onTaskAdded,
-  }) : super(key: key); // Correct super call
+  }); // Correct super call
 
   @override
   _AddTaskDialogContentState createState() => _AddTaskDialogContentState();

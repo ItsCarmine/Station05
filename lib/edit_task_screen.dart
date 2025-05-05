@@ -13,11 +13,11 @@ class EditTaskScreen extends StatefulWidget {
   final Box<String> categoryBox; // <-- Add category box
 
   const EditTaskScreen({
-    Key? key,
+    super.key,
     required this.task,
     required this.taskBox,
     required this.categoryBox, // <-- Add to constructor
-  }) : super(key: key);
+  });
 
   @override
   _EditTaskScreenState createState() => _EditTaskScreenState();
@@ -261,9 +261,8 @@ class _EditTaskScreenState extends State<EditTaskScreen> {
               // --- Recurrence Settings ---
               SwitchListTile(
                  contentPadding: EdgeInsets.zero,
-                 title: Text("Recurring Task" + 
-                              (isSubtask ? " (Not available for subtasks)" : 
-                              (hasSubtasks ? " (Not available for tasks with subtasks)" : ""))), 
+                 title: Text("Recurring Task${isSubtask ? " (Not available for subtasks)" : 
+                              (hasSubtasks ? " (Not available for tasks with subtasks)" : "")}"), 
                  value: (isSubtask || hasSubtasks) ? false : _editedIsRecurring, // Show false if subtask or has subtasks
                  onChanged: (isSubtask || hasSubtasks) // Disable if subtask OR has subtasks
                    ? null 

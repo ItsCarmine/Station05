@@ -1,5 +1,9 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
+// Make sure to adjust the platform channel to match your app's package name
+const platform = MethodChannel('com.station5.station5/deepfocus');
 
 class DeepFocusMode extends StatefulWidget {
   final int duration; // Duration in minutes
@@ -7,11 +11,11 @@ class DeepFocusMode extends StatefulWidget {
   final Function onFail; // Failure callback
 
   const DeepFocusMode({
-    Key? key, 
+    super.key, 
     required this.duration, 
     required this.onComplete, 
     required this.onFail
-  }) : super(key: key);
+  });
 
   @override
   _DeepFocusModeState createState() => _DeepFocusModeState();
@@ -29,13 +33,31 @@ class _DeepFocusModeState extends State<DeepFocusMode> with WidgetsBindingObserv
     WidgetsBinding.instance.addObserver(this);
     _secondsRemaining = widget.duration * 60;
     _startTimer();
+    _enableDeepFocusMode();
   }
   
   @override
   void dispose() {
+    _disableDeepFocusMode();
     WidgetsBinding.instance.removeObserver(this);
     _timer.cancel();
     super.dispose();
+  }
+  
+  Future<void> _enableDeepFocusMode() async {
+    try {
+      await platform.invokeMethod('enableLockTask');
+    } on PlatformException catch (e) {
+      print("Failed to enable deep focus mode: ${e.message}");
+    }
+  }
+  
+  Future<void> _disableDeepFocusMode() async {
+    try {
+      await platform.invokeMethod('disableLockTask');
+    } on PlatformException catch (e) {
+      print("Failed to disable deep focus mode: ${e.message}");
+    }
   }
   
   void _startTimer() {
@@ -50,6 +72,7 @@ class _DeepFocusModeState extends State<DeepFocusMode> with WidgetsBindingObserv
         });
       } else {
         _timer.cancel();
+        _disableDeepFocusMode();
         widget.onComplete();
       }
     });
@@ -61,7 +84,6 @@ class _DeepFocusModeState extends State<DeepFocusMode> with WidgetsBindingObserv
     if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
       // User is trying to leave the app
       _lastPaused = DateTime.now();
-      _showFailDialogWhenReturned();
     } else if (state == AppLifecycleState.resumed && _lastPaused != null) {
       // User has returned to the app
       _handleAppReturn();
@@ -73,14 +95,9 @@ class _DeepFocusModeState extends State<DeepFocusMode> with WidgetsBindingObserv
       // Calculate how long the user was away
       final timeAway = DateTime.now().difference(_lastPaused!);
       if (timeAway.inSeconds > 3) { // Give a small grace period
-        _failTask();
+        _showFailWarningDialog();
       }
     }
-  }
-  
-  void _showFailDialogWhenReturned() {
-    // This will be shown when they return
-    // We'll implement the actual dialog in _handleAppReturn
   }
   
   void _failTask() {
@@ -88,6 +105,7 @@ class _DeepFocusModeState extends State<DeepFocusMode> with WidgetsBindingObserv
     setState(() {
       _isActive = false;
     });
+    _disableDeepFocusMode();
     widget.onFail();
   }
   
@@ -107,35 +125,57 @@ class _DeepFocusModeState extends State<DeepFocusMode> with WidgetsBindingObserv
         appBar: AppBar(
           title: Text('Deep Focus Mode'),
           automaticallyImplyLeading: false, // Hide back button
+          backgroundColor: Colors.red.shade400, // Use a distinctive color
         ),
-        body: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(
-              'Focus Time Remaining',
-              style: TextStyle(fontSize: 24),
-            ),
-            SizedBox(height: 20),
-            Text(
-              '$minutes:${seconds.toString().padLeft(2, '0')}',
-              style: TextStyle(fontSize: 48, fontWeight: FontWeight.bold),
-            ),
-            SizedBox(height: 40),
-            Text(
-              'Leaving this screen will fail your task!',
-              style: TextStyle(color: Colors.red, fontSize: 16),
-            ),
-            SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: () {
-                _showExitWarningDialog();
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red,
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.do_not_disturb_on_rounded,
+                color: Colors.red.shade400,
+                size: 60,
               ),
-              child: Text('Give Up (Fail Task)'),
-            ),
-          ],
+              SizedBox(height: 20),
+              Text(
+                'DEEP FOCUS MODE',
+                style: TextStyle(
+                  fontSize: 24, 
+                  fontWeight: FontWeight.bold,
+                  color: Colors.red.shade400
+                ),
+              ),
+              SizedBox(height: 10),
+              Text(
+                'Leaving this screen will fail your task!',
+                style: TextStyle(color: Colors.red, fontSize: 16),
+              ),
+              SizedBox(height: 40),
+              // Timer Display
+              Text(
+                'Time Remaining',
+                style: TextStyle(fontSize: 18),
+              ),
+              SizedBox(height: 10),
+              Text(
+                '$minutes:${seconds.toString().padLeft(2, '0')}',
+                style: TextStyle(fontSize: 72, fontWeight: FontWeight.bold),
+              ),
+              SizedBox(height: 40),
+              ElevatedButton(
+                onPressed: () {
+                  _showExitWarningDialog();
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.red,
+                  foregroundColor: Colors.white,
+                  padding: EdgeInsets.symmetric(horizontal: 30, vertical: 15),
+                ),
+                child: Text('Give Up (Fail Task)', style: TextStyle(fontSize: 16)),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -160,9 +200,30 @@ class _DeepFocusModeState extends State<DeepFocusMode> with WidgetsBindingObserv
               onPressed: () {
                 Navigator.of(context).pop(); // Close dialog
                 _failTask();
-                Navigator.of(context).pop(); // Exit deep focus screen
               },
               child: Text('Give Up', style: TextStyle(color: Colors.red)),
+            ),
+          ],
+        );
+      },
+    );
+  }
+  
+  void _showFailWarningDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('Focus Lost!'),
+          content: Text('You left the app during deep focus mode. Your task will be marked as failed.'),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop(); // Close dialog
+                _failTask();
+              },
+              child: Text('I Understand', style: TextStyle(color: Colors.red)),
             ),
           ],
         );

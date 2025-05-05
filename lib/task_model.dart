@@ -62,9 +62,9 @@ class Task extends HiveObject {
     this.parentId, // Add to constructor
     List<String>? subtaskIds, // Add to constructor
     List<int>? recurrenceDaysOfWeek, // Add to constructor
-  }) : this.completionDates = completionDates ?? [],
-       this.subtaskIds = subtaskIds ?? [], // Initialize subtaskIds
-       this.recurrenceDaysOfWeek = recurrenceDaysOfWeek ?? []; // Initialize days of week
+  }) : completionDates = completionDates ?? [],
+       subtaskIds = subtaskIds ?? [], // Initialize subtaskIds
+       recurrenceDaysOfWeek = recurrenceDaysOfWeek ?? []; // Initialize days of week
 
   Task copyWith({
     String? id,

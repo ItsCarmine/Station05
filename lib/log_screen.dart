@@ -7,7 +7,7 @@ import 'goal_model.dart'; // May need for category info if not passed
 import 'main.dart'; // For box names & ID generator
 
 class LogScreen extends StatefulWidget {
-  const LogScreen({Key? key}) : super(key: key);
+  const LogScreen({super.key});
 
   @override
   _LogScreenState createState() => _LogScreenState();
@@ -85,9 +85,9 @@ class _LogScreenState extends State<LogScreen> {
         },
       ),
       floatingActionButton: FloatingActionButton(
-        child: Icon(Icons.add_comment_outlined), // Icon for manual entry
         tooltip: 'Add Manual Log Entry',
         onPressed: () => _showAddLogEntryDialog(context),
+        child: Icon(Icons.add_comment_outlined),
       ),
     );
   }
@@ -173,10 +173,10 @@ class _AddLogEntryDialogContent extends StatefulWidget {
   final Function(String category, DateTime date, double durationMinutes) onLogAdded;
 
   const _AddLogEntryDialogContent({
-    Key? key,
+    super.key,
     required this.availableCategories,
     required this.onLogAdded,
-  }) : super(key: key);
+  });
 
   @override
   _AddLogEntryDialogContentState createState() => _AddLogEntryDialogContentState();

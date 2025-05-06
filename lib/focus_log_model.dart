@@ -1,30 +1,45 @@
 import 'package:hive/hive.dart';
 
-part 'focus_log_model.g.dart'; // Will be generated
+part 'focus_log_model.g.dart';
 
-@HiveType(typeId: 3) // Ensure this typeId is unique (Task=0, Goal=2)
+@HiveType(typeId: 4) // Make sure this is a unique typeId
+enum FocusSessionStatus {
+  @HiveField(0)
+  completed,
+  
+  @HiveField(1)
+  failed,
+  
+  @HiveField(2)
+  inProgress,
+  
+  @HiveField(3)
+  skipped
+}
+
+@HiveType(typeId: 3)
 class FocusSessionLog extends HiveObject {
   @HiveField(0)
-  String id; // Unique ID for the log entry
+  String id;
 
   @HiveField(1)
-  String categoryName; // Category the focus was for
+  String categoryName;
 
   @HiveField(2)
-  DateTime startTime; // When the session started
+  DateTime startTime;
 
   @HiveField(3)
-  int durationSeconds; // How long the session lasted
-
-  // Optional: Link back to the specific task? Might be useful later.
-  // @HiveField(4)
-  // String? taskId; 
+  int durationSeconds;
+  
+  // Add this new field
+  @HiveField(4)
+  FocusSessionStatus status;
 
   FocusSessionLog({
     required this.id,
     required this.categoryName,
     required this.startTime,
     required this.durationSeconds,
-    // this.taskId,
+    this.status = FocusSessionStatus.completed, // Default to completed
   });
-} 
+}

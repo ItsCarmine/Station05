@@ -11,7 +11,7 @@ import 'duo_character.dart';
 import 'package:flutter/services.dart'; // Import SystemChrome
 import 'edit_task_screen.dart'; // Import the new edit screen
 import 'goal_model.dart'; // <-- Import Goal model
-import 'goals_screen.dart'; // <-- Import Goals screen (will create later)
+import 'goals_screen.dart'; // <-- Import Goals screen
 import 'focus_log_model.dart'; // <-- Import Log model
 import 'log_screen.dart'; // <-- Import Log screen
 import 'notification.dart'; // <-- Import Notification service
@@ -22,26 +22,12 @@ const String categoryBoxName = 'categories';
 const String goalBoxName = 'goals'; // <-- Define Goal box name
 const String focusLogBoxName = 'focus_logs'; // <-- Define Log box name
 const platform = MethodChannel('com.station5.station5/deepfocus');
-// Note from j, if you see two asterisks around a word in a comment like *word*, that just means bold for emphasis.
 
-// This class extends StatelessWidget. A *stateless* widget never stores its own changing data, it is not mutable. 
-// All the values it needs, text strings, booleans, numbers, are passed in when its built. When those values change, 
-// Flutter simply throws this instance away and builds a brand new one. It is just a function that goes from *data* 
-// to *UI*. Most of the UI in our app is so simple it doesn't need to store internal data. Like our tasks just need 
-// to call for the task title, task descrition, date, etc, and this is fairly common for UI, so they have a simple widget,
-// a stateless widget. A *stateful* widget is only needed when the widget itself must remember something between builds (lookup what 
-// a build is yourself, its too complicated for me to explain in this already long message): stuff that might need to be rememberd 
-// like an animation controller, a text-field cursor position, or whether a dropdown menu is open.
-// For more clarity: A state is any data that can change while the app is running: an int that counts remaining tasks, a bool 
-// that tracks dark-mode, a list of Task objects, etc. The key design choice is *where* that data lives:
-//     –  inside a *StatefulWidget* (local, its in itself)
-//     –  in a higher widget and passed down (not local, outside of itself)
-//     –  in a global store such as Provider, Riverpod, Bloc, etc (thanks chat for this info, idk what these are)
-// Stateless vs Stateful has no real speed difference for our use-cases (at its most complex we are showing a pi chart). 
-// Both rebuild whenever their inputs change; the only question is who owns the changing data.
-// TL;DR Use StatelessWidget unless the widget truly needs to hold its own mutable state. That keeps components simple, 
-// testable, and easy to reuse. Also, I will try to keep these shorter in the future, I just had no idea what most of these words were
-// an hour ago so I explained all of em' – j
+// Helper to generate unique IDs (can be used for logs too)
+String generateUniqueId() {
+  return DateTime.now().millisecondsSinceEpoch.toString() + Random().nextInt(1000).toString();
+}
+
 class NoTitle extends StatelessWidget {
   const NoTitle({super.key});
 
@@ -60,7 +46,6 @@ class SplashToAppWrapper extends StatefulWidget {
   @override
   _SplashToAppWrapperState createState() => _SplashToAppWrapperState();
 }
-
 
 class _SplashToAppWrapperState extends State<SplashToAppWrapper> {
   bool _showSplash = true;
@@ -103,7 +88,80 @@ class _SplashToAppWrapperState extends State<SplashToAppWrapper> {
   }
 }
 
-Future<void> main() async { // Make main async
+// Database migration function
+Future<void> _migrateFocusLogsIfNeeded() async {
+  final focusLogBox = Hive.box<FocusSessionLog>(focusLogBoxName);
+  bool needsRebuilding = false;
+  
+  // Check if any records have null status field
+  try {
+    print("Checking focus logs for migration need...");
+    for (var key in focusLogBox.keys) {
+      final log = focusLogBox.get(key);
+      if (log == null) continue;
+      
+      // This is just to trigger possible errors
+      try {
+        FocusSessionStatus status = log.status;
+        print("Log ${log.id} has status: $status");
+      } catch (e) {
+        print("Error accessing status for log ${log.id}: $e");
+        needsRebuilding = true;
+        break;
+      }
+    }
+  } catch (e) {
+    print("Migration needed for focus logs: $e");
+    needsRebuilding = true;
+  }
+  
+  // If migration needed, perform it
+  if (needsRebuilding) {
+    print("Performing migration for focus logs...");
+    // Backup the box data that we can recover
+    List<FocusSessionLog> validLogs = [];
+    try {
+      for (var key in focusLogBox.keys) {
+        try {
+          final entry = focusLogBox.get(key);
+          if (entry != null) {
+            // Create a new valid entry with default status
+            validLogs.add(FocusSessionLog(
+              id: entry.id,
+              categoryName: entry.categoryName,
+              startTime: entry.startTime,
+              durationSeconds: entry.durationSeconds,
+              status: FocusSessionStatus.completed, // Default
+            ));
+            print("Backed up log: ${entry.id}");
+          }
+        } catch (e) {
+          print("Skipping corrupt entry: $e");
+        }
+      }
+    } catch (e) {
+      print("Error during backup: $e");
+    }
+    
+    // Delete and recreate the box
+    await focusLogBox.close();
+    await Hive.deleteBoxFromDisk(focusLogBoxName);
+    final newBox = await Hive.openBox<FocusSessionLog>(focusLogBoxName);
+    
+    // Restore valid entries
+    for (var log in validLogs) {
+      await newBox.put(log.id, log);
+      print("Restored log: ${log.id}");
+    }
+    
+    print("Focus logs migration completed, restored ${validLogs.length} entries.");
+  } else {
+    print("No migration needed for focus logs.");
+  }
+}
+
+// Main function - Fixed the duplicated version
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized(); // Ensure bindings are initialized
 
   // --- Set Preferred Orientations ---
@@ -120,6 +178,7 @@ Future<void> main() async { // Make main async
   Hive.registerAdapter(TaskAdapter());
   Hive.registerAdapter(GoalAdapter()); // <-- Register GoalAdapter
   Hive.registerAdapter(FocusSessionLogAdapter()); // <-- Register Log adapter
+  Hive.registerAdapter(FocusSessionStatusAdapter()); // <-- Make sure this is registered too
 
   // Open boxes
   await Hive.openBox<Task>(taskBoxName);
@@ -127,29 +186,28 @@ Future<void> main() async { // Make main async
   await Hive.openBox<Goal>(goalBoxName); // <-- Open Goal box
   await Hive.openBox<FocusSessionLog>(focusLogBoxName); // <-- Open Log box
 
+  // Run migration if needed
+  await _migrateFocusLogsIfNeeded();
+
+  // Add a test failed entry for debugging
+  final logBox = Hive.box<FocusSessionLog>(focusLogBoxName);
+  final testLog = FocusSessionLog(
+    id: generateUniqueId(),
+    categoryName: "Test Category",
+    startTime: DateTime.now(),
+    durationSeconds: 300,
+    status: FocusSessionStatus.failed,
+  );
+  await logBox.put(testLog.id, testLog);
+  print("Added test failed session: ${testLog.id} with status: ${testLog.status}");
+
   await NotificationService().init(); // Initialize notification service
 
   // --- Show a test notification on app boot ---
   NotificationService().showNotification(id: 114, title: "TestNotification", body: "App Booted!");
 
-
   runApp(NoTitle());
 }
-
-
-
-// --- Move helper function outside class if it doesn't depend on instance state ---
-// Helper to generate unique IDs (can be used for logs too)
-String generateUniqueId() {
-  return DateTime.now().millisecondsSinceEpoch.toString() + Random().nextInt(1000).toString();
-}
-
-// class NoTitle extends StatelessWidget {
-//   @override
-//   Widget build(BuildContext context) {
-//     return MaterialApp(debugShowCheckedModeBanner: true, home: todoScreen());
-//   }
-// }
 
 class todoScreen extends StatefulWidget {
   const todoScreen({super.key});
@@ -486,37 +544,27 @@ class todoScreenState extends State<todoScreen> {
 
     // Helper function to build the list recursively or flattened
     List<Widget> buildTaskTree(List<Task> tasks, int depth) {
-        // print('[buildTaskTree] Building tree at depth $depth for ${tasks.length} tasks.');
         List<Widget> taskWidgets = [];
         for (final task in tasks) {
-            // print('[buildTaskTree] Processing task: ${task.title} (ID: ${task.id}, Parent: ${task.parentId})');
             // Build the main task tile
             taskWidgets.add(_buildTaskTile(task, depth));
 
             // --- Conditionally build subtask tiles --- 
             final bool isExpanded = _expandedTasks[task.id] ?? false;
             if (task.subtaskIds.isNotEmpty && isExpanded) {
-                // print('[buildTaskTree] Task ${task.title} has subtask IDs: ${task.subtaskIds}');
                 List<Task> subtasks = [];
                 for (String id in task.subtaskIds) {
                     Task? subtask = taskBox.get(id); // This should now work with String ID
-                    // print('[buildTaskTree] Attempting to fetch subtask ID: $id. Found: ${subtask?.title ?? 'NULL'}');
                     if (subtask != null) {
                        subtasks.add(subtask);
-                    } else {
-                       // print('[buildTaskTree] WARNING: Subtask with ID $id not found in taskBox!');
                     }
                 }
                 // Ensure subtasks list isn't empty after fetching
                 if (subtasks.isNotEmpty) {
-                   // print('[buildTaskTree] Adding ${subtasks.length} subtasks for ${task.title} recursively.');
                    taskWidgets.addAll(buildTaskTree(subtasks, depth + 1));
-                // } else {
-                //    print('[buildTaskTree] No valid subtasks found to add for ${task.title}.');
                 }
             }
         }
-        // print('[buildTaskTree] Finished depth $depth. Total widgets: ${taskWidgets.length}');
         return taskWidgets;
     }
 
@@ -539,7 +587,6 @@ class todoScreenState extends State<todoScreen> {
     final double indentation = depth * 30.0; // Adjust multiplier as needed
     final bool hasSubtasks = task.subtaskIds.isNotEmpty;
     final bool isExpanded = _expandedTasks[task.id] ?? false;
-    // print('[_buildTaskTile] Building tile for: ${task.title} (ID: ${task.id}) at depth $depth with indent $indentation');
 
     return Padding(
       padding: EdgeInsets.only(left: indentation, top: 6, right: 8, bottom: 6),
@@ -732,23 +779,18 @@ class todoScreenState extends State<todoScreen> {
           content: _AddSubtaskDialogContent(
             parentTask: parentTask,
             onSubtaskAdded: (newSubtask) async { // Make async
-              // print('[AddSubtask] Adding subtask: ${newSubtask.title} to parent: ${parentTask.title}');
               // 1. Save the new subtask using its ID as the key
               await taskBox.put(newSubtask.id, newSubtask);
-              // print('[AddSubtask] New subtask ${newSubtask.id} put into box.');
               
               // 2. Update parent task's subtask list
               // Ensure parentTask is still valid/managed if necessary
               // If parentTask is directly from the box, modification and save should work.
               parentTask.subtaskIds.add(newSubtask.id);
               await parentTask.save(); 
-              // print('[AddSubtask] Parent task ${parentTask.id} updated and saved.');
 
               // 3. Refresh UI by reloading all data
               setState(() { 
-                  // print('[AddSubtask] Calling _loadTasksAndCategories inside setState...');
                   _loadTasksAndCategories(); // Reload data
-                  // print('[AddSubtask] State update triggered after adding subtask.');
               }); 
               Navigator.of(context).pop(); // Close dialog
               ScaffoldMessenger.of(context).showSnackBar(
@@ -1074,15 +1116,6 @@ class todoScreenState extends State<todoScreen> {
         }
      }
      // --- End Recursive Deletion --- 
-
-     // Original logic (partially redundant now or needs adjustment)
-     // tasksByCategory[task.category]?.removeWhere((t) => t.id == task.id);
-     // If category becomes empty, remove it (optional)
-     // if (tasksByCategory[task.category]?.isEmpty ?? false) {
-     //     tasksByCategory.remove(task.category);
-     //     // Also remove from categoryBox
-     //     categoryBox.deleteAt(categoryBox.values.toList().indexOf(task.category));
-     // }
 
      // Refresh UI (might need more sophisticated state update)
      setState(() { _loadTasksAndCategories(); }); 

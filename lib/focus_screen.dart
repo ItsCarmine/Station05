@@ -6,8 +6,7 @@ import 'package:hive/hive.dart';
 import 'main.dart';
 import 'deep_focus_mode.dart';
 // import 'package:intl/intl.dart'; // Not strictly needed here anymore
-// Add a new state variable in _FocusScreenState class
-bool _deepFocusEnabled = false;
+
 // Enum to represent Pomodoro phases
 enum PomodoroPhase { work, shortBreak, longBreak }
 
@@ -28,6 +27,7 @@ class _FocusScreenState extends State<FocusScreen> {
   int _currentSeconds = 0;
   bool _isTimerRunning = false;
   int _secondsElapsedThisSession = 0;
+  bool _deepFocusEnabled = false; // Moved inside the class
 
   // Editable Durations
   late TextEditingController _workDurationController;
@@ -138,25 +138,44 @@ class _FocusScreenState extends State<FocusScreen> {
      }
   }
 
+  // Modify the regular _saveFocusTime method to include status
   void _saveFocusTime(bool resetStartTime) {
-     // Only save if it was a work phase OR flow mode, and time elapsed
-     if (_secondsElapsedThisSession > 0 && (_isWorkPhase || _sessionType == FocusSessionType.flow)) {
-        final logBox = Hive.box<FocusSessionLog>(focusLogBoxName);
-        final logEntry = FocusSessionLog(
-          id: generateUniqueId(),
-          categoryName: widget.task.category,
-          // Use recorded start time, or approximate if unavailable
-          startTime: _sessionStartTime ?? DateTime.now().subtract(Duration(seconds: _secondsElapsedThisSession)),
-          durationSeconds: _secondsElapsedThisSession,
-        );
-        logBox.put(logEntry.id, logEntry);
-        print("Saved log: ${logEntry.durationSeconds}s for ${logEntry.categoryName} starting around ${logEntry.startTime}");
-     }
-     // Reset counter for the next segment
-     _secondsElapsedThisSession = 0; 
-     if(resetStartTime){
-       _sessionStartTime = null; // Reset start time for next phase/session
-     }
+    if (_secondsElapsedThisSession > 0 && (_isWorkPhase || _sessionType == FocusSessionType.flow)) {
+      final logBox = Hive.box<FocusSessionLog>(focusLogBoxName);
+      final logEntry = FocusSessionLog(
+        id: generateUniqueId(),
+        categoryName: widget.task.category,
+        startTime: _sessionStartTime ?? DateTime.now().subtract(Duration(seconds: _secondsElapsedThisSession)),
+        durationSeconds: _secondsElapsedThisSession,
+        status: FocusSessionStatus.completed, // Default to completed for regular sessions
+      );
+      logBox.put(logEntry.id, logEntry);
+    }
+    
+    _secondsElapsedThisSession = 0; 
+    if(resetStartTime) {
+      _sessionStartTime = null;
+    }
+  }
+
+  // Implement this method properly
+  void _saveFocusTimeWithStatus(bool resetStartTime, FocusSessionStatus status) {
+    if (_secondsElapsedThisSession > 0 && (_isWorkPhase || _sessionType == FocusSessionType.flow)) {
+      final logBox = Hive.box<FocusSessionLog>(focusLogBoxName);
+      final logEntry = FocusSessionLog(
+        id: generateUniqueId(),
+        categoryName: widget.task.category,
+        startTime: _sessionStartTime ?? DateTime.now().subtract(Duration(seconds: _secondsElapsedThisSession)),
+        durationSeconds: _secondsElapsedThisSession,
+        status: status, // Use the passed status
+      );
+      logBox.put(logEntry.id, logEntry);
+    }
+    
+    _secondsElapsedThisSession = 0; 
+    if(resetStartTime) {
+      _sessionStartTime = null;
+    }
   }
 
   String _formatTime(int totalSeconds) {
@@ -192,19 +211,20 @@ class _FocusScreenState extends State<FocusScreen> {
       MaterialPageRoute(
         builder: (context) => DeepFocusMode(
           duration: _workDurationMinutes,
-          onComplete: () {
+          onComplete: (status) {
             // Mark task as completed 
             if (widget.task.isRecurring) {
-              // For recurring tasks, mark this instance completed
               if (!widget.task.completionDates.any((date) => DateUtils.isSameDay(date, DateTime.now()))) {
                 widget.task.completionDates.add(DateTime.now());
                 widget.task.save();
               }
             } else {
-              // For regular tasks, mark as completed
               widget.task.isCompleted = true;
               widget.task.save();
             }
+            
+            // Save the focus session log with status
+            _saveFocusSessionWithStatus(status);
             
             // Navigate back to task list
             Navigator.of(context).popUntil((route) => route.isFirst);
@@ -214,8 +234,9 @@ class _FocusScreenState extends State<FocusScreen> {
               SnackBar(content: Text('Task completed successfully!'), backgroundColor: Colors.green),
             );
           },
-          onFail: () {
-            // Mark task as failed (not completed)
+          onFail: (status) {
+            // Save the focus session log with failed status
+            _saveFocusSessionWithStatus(status);
             
             // Navigate back to task list
             Navigator.of(context).popUntil((route) => route.isFirst);
@@ -229,6 +250,33 @@ class _FocusScreenState extends State<FocusScreen> {
       ),
     );
   }
+
+  // Add this new method to save with status
+  void _saveFocusSessionWithStatus(FocusSessionStatus status) {
+    final logBox = Hive.box<FocusSessionLog>(focusLogBoxName);
+    
+    // Calculate session duration based on status
+    final sessionDuration = status == FocusSessionStatus.completed 
+        ? _workDurationMinutes * 60 
+        : (_workDurationMinutes * 60) - _currentSeconds; // Calculate actual time spent
+    
+    // Create the log entry with the correct status
+    final logEntry = FocusSessionLog(
+      id: generateUniqueId(),
+      categoryName: widget.task.category,
+      startTime: DateTime.now().subtract(Duration(seconds: sessionDuration)),
+      durationSeconds: sessionDuration,
+      status: status, // Use the passed status (completed or failed)
+    );
+    
+    // Print debug information
+    print("Saving focus session with status: ${status.toString()}");
+    print("Duration: ${sessionDuration} seconds");
+    
+    // Save to Hive
+    logBox.put(logEntry.id, logEntry);
+  }
+
 
   // --- NEW: Show Session Type Selection Dialog ---
   Future<void> _showSessionTypeDialog() async {
@@ -475,26 +523,26 @@ class _FocusScreenState extends State<FocusScreen> {
    }
    // ---------------------------------
 
-   // --- Flow Timer Logic ---
+   // --- Implement proper Flow Timer Logic ---
    void _toggleFlowTimer() {
-      setState(() {
-         if (_isTimerRunning) {
-            _timer?.cancel(); // Pause the timer
-            _saveFocusTime(false); // Save progress, don't reset start time
-         } else {
-            // Start the timer
-            _sessionStartTime ??= DateTime.now(); // Record start time if not already set
-            _timer = Timer.periodic(Duration(seconds: 1), (timer) {
-               if (!mounted) { // Check if widget is still mounted
-                  timer.cancel();
-                  return;
-               }
-               setState(() {
-                  _flowSecondsElapsed++;
-                  _secondsElapsedThisSession++; // Also track total time for saving
-               });
+      if (_isTimerRunning) {
+         _timer?.cancel(); // Pause the timer
+         _saveFocusTime(false); // Save progress, don't reset start time
+      } else {
+         // Start the timer
+         _sessionStartTime ??= DateTime.now(); // Record start time if not already set
+         _timer = Timer.periodic(Duration(seconds: 1), (timer) {
+            if (!mounted) { // Check if widget is still mounted
+               timer.cancel();
+               return;
+            }
+            setState(() {
+               _flowSecondsElapsed++;
+               _secondsElapsedThisSession++; // Also track total time for saving
             });
-         }
+         });
+      }
+      setState(() {
          _isTimerRunning = !_isTimerRunning; // Toggle the running state
       });
    }
@@ -526,4 +574,4 @@ class _FocusScreenState extends State<FocusScreen> {
          ],
       );
    }
-} 
+}

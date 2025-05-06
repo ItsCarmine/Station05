@@ -23,30 +23,26 @@ class Task extends HiveObject {
   @HiveField(5)
   DateTime dueDate;
 
-  @HiveField(7)
+  @HiveField(6)
   bool isRecurring;
 
-  @HiveField(8)
+  @HiveField(7)
   String recurrenceType;
 
-  @HiveField(9)
+  @HiveField(8)
   int recurrenceInterval;
 
-  @HiveField(10)
+  @HiveField(9)
   List<DateTime> completionDates;
 
-  // --- New fields for subtasks ---
+  @HiveField(10)
+  final String? parentId;
+
   @HiveField(11)
-  final String? parentId; // Null if it's a top-level task
+  List<String> subtaskIds;
 
   @HiveField(12)
-  List<String> subtaskIds; // IDs of direct children tasks
-  // ------------------------------
-
-  // --- New field for weekly recurrence days ---
-  @HiveField(13)
-  List<int> recurrenceDaysOfWeek; // Stores 1-7 for Mon-Sun, used if type is weekly
-  // ------------------------------------------
+  List<int> recurrenceDaysOfWeek;
 
   Task({
     required this.id,
@@ -59,12 +55,12 @@ class Task extends HiveObject {
     this.recurrenceType = 'none',
     this.recurrenceInterval = 1,
     List<DateTime>? completionDates,
-    this.parentId, // Add to constructor
-    List<String>? subtaskIds, // Add to constructor
-    List<int>? recurrenceDaysOfWeek, // Add to constructor
+    this.parentId,
+    List<String>? subtaskIds,
+    List<int>? recurrenceDaysOfWeek,
   }) : completionDates = completionDates ?? [],
-       subtaskIds = subtaskIds ?? [], // Initialize subtaskIds
-       recurrenceDaysOfWeek = recurrenceDaysOfWeek ?? []; // Initialize days of week
+       subtaskIds = subtaskIds ?? [],
+       recurrenceDaysOfWeek = recurrenceDaysOfWeek ?? [];
 
   Task copyWith({
     String? id,
@@ -78,7 +74,7 @@ class Task extends HiveObject {
     int? recurrenceInterval,
     List<DateTime>? completionDates,
     String? parentId,
-    bool clearParentId = false, // Add flag to explicitly clear parentId
+    bool clearParentId = false,
     List<String>? subtaskIds,
     List<int>? recurrenceDaysOfWeek,
   }) {
@@ -93,7 +89,7 @@ class Task extends HiveObject {
       recurrenceType: recurrenceType ?? this.recurrenceType,
       recurrenceInterval: recurrenceInterval ?? this.recurrenceInterval,
       completionDates: completionDates ?? this.completionDates,
-      parentId: clearParentId ? null : parentId ?? this.parentId, // Handle parentId update/clear
+      parentId: clearParentId ? null : parentId ?? this.parentId,
       subtaskIds: subtaskIds ?? this.subtaskIds,
       recurrenceDaysOfWeek: recurrenceDaysOfWeek ?? this.recurrenceDaysOfWeek,
     );

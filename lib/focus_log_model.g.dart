@@ -16,24 +16,12 @@ class FocusSessionLogAdapter extends TypeAdapter<FocusSessionLog> {
     final fields = <int, dynamic>{
       for (int i = 0; i < numOfFields; i++) reader.readByte(): reader.read(),
     };
-    
-    // Handle the case where status might be null in existing data
-    FocusSessionStatus status = FocusSessionStatus.completed; // Default value
-    if (fields.containsKey(4) && fields[4] != null) {
-      try {
-        status = fields[4] as FocusSessionStatus;
-      } catch (e) {
-        print("Error reading status field: $e");
-        // Keep the default value
-      }
-    }
-    
     return FocusSessionLog(
       id: fields[0] as String,
       categoryName: fields[1] as String,
       startTime: fields[2] as DateTime,
       durationSeconds: fields[3] as int,
-      status: status, // Use our safe status value
+      status: fields[4] as FocusSessionStatus,
     );
   }
 
@@ -70,49 +58,35 @@ class FocusSessionStatusAdapter extends TypeAdapter<FocusSessionStatus> {
 
   @override
   FocusSessionStatus read(BinaryReader reader) {
-    try {
-      final value = reader.readByte();
-      switch (value) {
-        case 0:
-          return FocusSessionStatus.completed;
-        case 1:
-          return FocusSessionStatus.failed;
-        case 2:
-          return FocusSessionStatus.inProgress;
-        case 3:
-          return FocusSessionStatus.skipped;
-        default:
-          print("Unknown status value: $value, defaulting to completed");
-          return FocusSessionStatus.completed;
-      }
-    } catch (e) {
-      print("Error reading FocusSessionStatus: $e");
-      // If any error occurs, return a default value
-      return FocusSessionStatus.completed;
+    switch (reader.readByte()) {
+      case 0:
+        return FocusSessionStatus.completed;
+      case 1:
+        return FocusSessionStatus.failed;
+      case 2:
+        return FocusSessionStatus.inProgress;
+      case 3:
+        return FocusSessionStatus.skipped;
+      default:
+        return FocusSessionStatus.completed;
     }
   }
 
   @override
   void write(BinaryWriter writer, FocusSessionStatus obj) {
-    try {
-      switch (obj) {
-        case FocusSessionStatus.completed:
-          writer.writeByte(0);
-          break;
-        case FocusSessionStatus.failed:
-          writer.writeByte(1);
-          break;
-        case FocusSessionStatus.inProgress:
-          writer.writeByte(2);
-          break;
-        case FocusSessionStatus.skipped:
-          writer.writeByte(3);
-          break;
-      }
-    } catch (e) {
-      print("Error writing FocusSessionStatus: $e");
-      // Write completed as a fallback
-      writer.writeByte(0);
+    switch (obj) {
+      case FocusSessionStatus.completed:
+        writer.writeByte(0);
+        break;
+      case FocusSessionStatus.failed:
+        writer.writeByte(1);
+        break;
+      case FocusSessionStatus.inProgress:
+        writer.writeByte(2);
+        break;
+      case FocusSessionStatus.skipped:
+        writer.writeByte(3);
+        break;
     }
   }
 

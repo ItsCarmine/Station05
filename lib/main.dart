@@ -11,7 +11,7 @@ import 'duo_character.dart';
 import 'package:flutter/services.dart'; // Import SystemChrome
 import 'edit_task_screen.dart'; // Import the new edit screen
 import 'goal_model.dart'; // <-- Import Goal model
-import 'goals_screen.dart'; // <-- Import Goals screen (will create later)
+import 'goals_screen.dart'; // <-- Import Goals screen
 import 'focus_log_model.dart'; // <-- Import Log model
 import 'log_screen.dart'; // <-- Import Log screen
 import 'notification.dart'; // <-- Import Notification service
@@ -22,26 +22,12 @@ const String categoryBoxName = 'categories';
 const String goalBoxName = 'goals'; // <-- Define Goal box name
 const String focusLogBoxName = 'focus_logs'; // <-- Define Log box name
 const platform = MethodChannel('com.station5.station5/deepfocus');
-// Note from j, if you see two asterisks around a word in a comment like *word*, that just means bold for emphasis.
 
-// This class extends StatelessWidget. A *stateless* widget never stores its own changing data, it is not mutable. 
-// All the values it needs, text strings, booleans, numbers, are passed in when its built. When those values change, 
-// Flutter simply throws this instance away and builds a brand new one. It is just a function that goes from *data* 
-// to *UI*. Most of the UI in our app is so simple it doesn't need to store internal data. Like our tasks just need 
-// to call for the task title, task descrition, date, etc, and this is fairly common for UI, so they have a simple widget,
-// a stateless widget. A *stateful* widget is only needed when the widget itself must remember something between builds (lookup what 
-// a build is yourself, its too complicated for me to explain in this already long message): stuff that might need to be rememberd 
-// like an animation controller, a text-field cursor position, or whether a dropdown menu is open.
-// For more clarity: A state is any data that can change while the app is running: an int that counts remaining tasks, a bool 
-// that tracks dark-mode, a list of Task objects, etc. The key design choice is *where* that data lives:
-//     –  inside a *StatefulWidget* (local, its in itself)
-//     –  in a higher widget and passed down (not local, outside of itself)
-//     –  in a global store such as Provider, Riverpod, Bloc, etc (thanks chat for this info, idk what these are)
-// Stateless vs Stateful has no real speed difference for our use-cases (at its most complex we are showing a pi chart). 
-// Both rebuild whenever their inputs change; the only question is who owns the changing data.
-// TL;DR Use StatelessWidget unless the widget truly needs to hold its own mutable state. That keeps components simple, 
-// testable, and easy to reuse. Also, I will try to keep these shorter in the future, I just had no idea what most of these words were
-// an hour ago so I explained all of em' – j
+// Helper to generate unique IDs (can be used for logs too)
+String generateUniqueId() {
+  return DateTime.now().millisecondsSinceEpoch.toString() + Random().nextInt(1000).toString();
+}
+
 class NoTitle extends StatelessWidget {
   const NoTitle({super.key});
 
@@ -60,7 +46,6 @@ class SplashToAppWrapper extends StatefulWidget {
   @override
   _SplashToAppWrapperState createState() => _SplashToAppWrapperState();
 }
-
 
 class _SplashToAppWrapperState extends State<SplashToAppWrapper> {
   bool _showSplash = true;
@@ -103,7 +88,80 @@ class _SplashToAppWrapperState extends State<SplashToAppWrapper> {
   }
 }
 
-Future<void> main() async { // Make main async
+// Database migration function
+Future<void> _migrateFocusLogsIfNeeded() async {
+  final focusLogBox = Hive.box<FocusSessionLog>(focusLogBoxName);
+  bool needsRebuilding = false;
+  
+  // Check if any records have null status field
+  try {
+    print("Checking focus logs for migration need...");
+    for (var key in focusLogBox.keys) {
+      final log = focusLogBox.get(key);
+      if (log == null) continue;
+      
+      // This is just to trigger possible errors
+      try {
+        FocusSessionStatus status = log.status;
+        print("Log ${log.id} has status: $status");
+      } catch (e) {
+        print("Error accessing status for log ${log.id}: $e");
+        needsRebuilding = true;
+        break;
+      }
+    }
+  } catch (e) {
+    print("Migration needed for focus logs: $e");
+    needsRebuilding = true;
+  }
+  
+  // If migration needed, perform it
+  if (needsRebuilding) {
+    print("Performing migration for focus logs...");
+    // Backup the box data that we can recover
+    List<FocusSessionLog> validLogs = [];
+    try {
+      for (var key in focusLogBox.keys) {
+        try {
+          final entry = focusLogBox.get(key);
+          if (entry != null) {
+            // Create a new valid entry with default status
+            validLogs.add(FocusSessionLog(
+              id: entry.id,
+              categoryName: entry.categoryName,
+              startTime: entry.startTime,
+              durationSeconds: entry.durationSeconds,
+              status: FocusSessionStatus.completed, // Default
+            ));
+            print("Backed up log: ${entry.id}");
+          }
+        } catch (e) {
+          print("Skipping corrupt entry: $e");
+        }
+      }
+    } catch (e) {
+      print("Error during backup: $e");
+    }
+    
+    // Delete and recreate the box
+    await focusLogBox.close();
+    await Hive.deleteBoxFromDisk(focusLogBoxName);
+    final newBox = await Hive.openBox<FocusSessionLog>(focusLogBoxName);
+    
+    // Restore valid entries
+    for (var log in validLogs) {
+      await newBox.put(log.id, log);
+      print("Restored log: ${log.id}");
+    }
+    
+    print("Focus logs migration completed, restored ${validLogs.length} entries.");
+  } else {
+    print("No migration needed for focus logs.");
+  }
+}
+
+// Main function - Fixed the duplicated version
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized(); // Ensure bindings are initialized
 
   // --- Set Preferred Orientations ---
@@ -120,6 +178,7 @@ Future<void> main() async { // Make main async
   Hive.registerAdapter(TaskAdapter());
   Hive.registerAdapter(GoalAdapter()); // <-- Register GoalAdapter
   Hive.registerAdapter(FocusSessionLogAdapter()); // <-- Register Log adapter
+  Hive.registerAdapter(FocusSessionStatusAdapter()); // <-- Make sure this is registered too
 
   // Open boxes
   await Hive.openBox<Task>(taskBoxName);
@@ -127,29 +186,28 @@ Future<void> main() async { // Make main async
   await Hive.openBox<Goal>(goalBoxName); // <-- Open Goal box
   await Hive.openBox<FocusSessionLog>(focusLogBoxName); // <-- Open Log box
 
+  // Run migration if needed
+  await _migrateFocusLogsIfNeeded();
+
+  // Add a test failed entry for debugging
+  final logBox = Hive.box<FocusSessionLog>(focusLogBoxName);
+  final testLog = FocusSessionLog(
+    id: generateUniqueId(),
+    categoryName: "Test Category",
+    startTime: DateTime.now(),
+    durationSeconds: 300,
+    status: FocusSessionStatus.failed,
+  );
+  await logBox.put(testLog.id, testLog);
+  print("Added test failed session: ${testLog.id} with status: ${testLog.status}");
+
   await NotificationService().init(); // Initialize notification service
 
   // --- Show a test notification on app boot ---
   NotificationService().showNotification(id: 114, title: "TestNotification", body: "App Booted!");
 
-
   runApp(NoTitle());
 }
-
-
-
-// --- Move helper function outside class if it doesn't depend on instance state ---
-// Helper to generate unique IDs (can be used for logs too)
-String generateUniqueId() {
-  return DateTime.now().millisecondsSinceEpoch.toString() + Random().nextInt(1000).toString();
-}
-
-// class NoTitle extends StatelessWidget {
-//   @override
-//   Widget build(BuildContext context) {
-//     return MaterialApp(debugShowCheckedModeBanner: true, home: todoScreen());
-//   }
-// }
 
 class todoScreen extends StatefulWidget {
   const todoScreen({super.key});
@@ -292,21 +350,8 @@ class todoScreenState extends State<todoScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Color(0xFFF9F5F1),  // Using the hex color #F9F5F1
       appBar: AppBar(
-        backgroundColor: Color(0xFFF9F5F1), // Match body background
-        elevation: 0, // Remove shadow for seamless look
-        title: Column(
-          children: [
-            Text("To Do List", style: TextStyle(fontSize: 22)),
-            //shows the date which you are in so if u do go to may 10 for example and currently it is april 7 then when u select the date the date u choose will be shown below the todo list so u 
-            //know which day you are on
-            Text(
-              DateFormat('MMM d, yyyy').format(_selectedDate),
-              style: TextStyle(fontSize: 14, fontWeight: FontWeight.normal),
-            ),
-          ],
-        ),
+        title: Text("To Do List", style: TextStyle(fontSize: 22)),
         centerTitle: true,
         actions: [
           IconButton(
@@ -317,14 +362,13 @@ class todoScreenState extends State<todoScreen> {
         ],
       ),
       drawer: Drawer(
-        backgroundColor: Color(0xFFDDD9E3), // Set your custom color here
         child: ListView(
           padding: EdgeInsets.zero,
           children: [
             SizedBox(height: 20.0),
             ListTile(
               leading: Icon(Icons.list),
-              title: Text(''),
+              title: Text('To Do List'),
               onTap: () {
                 Navigator.pop(context); // Close the drawer
               },
@@ -486,37 +530,27 @@ class todoScreenState extends State<todoScreen> {
 
     // Helper function to build the list recursively or flattened
     List<Widget> buildTaskTree(List<Task> tasks, int depth) {
-        // print('[buildTaskTree] Building tree at depth $depth for ${tasks.length} tasks.');
         List<Widget> taskWidgets = [];
         for (final task in tasks) {
-            // print('[buildTaskTree] Processing task: ${task.title} (ID: ${task.id}, Parent: ${task.parentId})');
             // Build the main task tile
             taskWidgets.add(_buildTaskTile(task, depth));
 
             // --- Conditionally build subtask tiles --- 
             final bool isExpanded = _expandedTasks[task.id] ?? false;
             if (task.subtaskIds.isNotEmpty && isExpanded) {
-                // print('[buildTaskTree] Task ${task.title} has subtask IDs: ${task.subtaskIds}');
                 List<Task> subtasks = [];
                 for (String id in task.subtaskIds) {
                     Task? subtask = taskBox.get(id); // This should now work with String ID
-                    // print('[buildTaskTree] Attempting to fetch subtask ID: $id. Found: ${subtask?.title ?? 'NULL'}');
                     if (subtask != null) {
                        subtasks.add(subtask);
-                    } else {
-                       // print('[buildTaskTree] WARNING: Subtask with ID $id not found in taskBox!');
                     }
                 }
                 // Ensure subtasks list isn't empty after fetching
                 if (subtasks.isNotEmpty) {
-                   // print('[buildTaskTree] Adding ${subtasks.length} subtasks for ${task.title} recursively.');
                    taskWidgets.addAll(buildTaskTree(subtasks, depth + 1));
-                // } else {
-                //    print('[buildTaskTree] No valid subtasks found to add for ${task.title}.');
                 }
             }
         }
-        // print('[buildTaskTree] Finished depth $depth. Total widgets: ${taskWidgets.length}');
         return taskWidgets;
     }
 
@@ -539,171 +573,162 @@ class todoScreenState extends State<todoScreen> {
     final double indentation = depth * 30.0; // Adjust multiplier as needed
     final bool hasSubtasks = task.subtaskIds.isNotEmpty;
     final bool isExpanded = _expandedTasks[task.id] ?? false;
-    // print('[_buildTaskTile] Building tile for: ${task.title} (ID: ${task.id}) at depth $depth with indent $indentation');
 
     return Padding(
-      padding: EdgeInsets.only(left: indentation, top: 6, right: 8, bottom: 6),
-      child: Card(
-        color: Color(0xFFF9F7F3), // Subtle contrast
-        elevation: 2,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        child: Padding(
-          padding: EdgeInsets.all(8),
-          child: ListTile(
-            leading: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (hasSubtasks)
-                  IconButton(
-                    icon: Icon(isExpanded ? Icons.expand_less : Icons.expand_more),
-                    iconSize: 20,
-                    padding: EdgeInsets.zero,
-                    constraints: BoxConstraints(), // Remove default padding
-                    visualDensity: VisualDensity.compact, // Make it tighter
-                    onPressed: () {
-                      setState(() {
-                        _expandedTasks[task.id] = !isExpanded;
-                      });
-                    },
-                  )
-                else
-                  SizedBox(width: 24), // Placeholder to align checkboxes (estimated icon width)
-                Checkbox(
-                  value: isInstanceCompleted, // Use instance completion status
-                  onChanged: (bool? value) {
-                    // Only allow checking if it's the actual due date or already completed today
-                    // Prevents checking off future recurring instances shown historically
-                    if (DateUtils.isSameDay(task.dueDate, _selectedDate) || isInstanceCompleted) {
-                        _updateTaskCompletion(task, value ?? false);
-                    }
-                  },
-                  visualDensity: VisualDensity.compact,
-                ),
-              ],
+      padding: EdgeInsets.only(left: indentation),
+      child: ListTile(
+        leading: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (hasSubtasks)
+              IconButton(
+                icon: Icon(isExpanded ? Icons.expand_less : Icons.expand_more),
+                iconSize: 20,
+                padding: EdgeInsets.zero,
+                constraints: BoxConstraints(), // Remove default padding
+                visualDensity: VisualDensity.compact, // Make it tighter
+                onPressed: () {
+                  setState(() {
+                    _expandedTasks[task.id] = !isExpanded;
+                  });
+                },
+              )
+            else
+              SizedBox(width: 24), // Placeholder to align checkboxes (estimated icon width)
+            Checkbox(
+              value: isInstanceCompleted, // Use instance completion status
+              onChanged: (bool? value) {
+                // Only allow checking if it's the actual due date or already completed today
+                // Prevents checking off future recurring instances shown historically
+                if (DateUtils.isSameDay(task.dueDate, _selectedDate) || isInstanceCompleted) {
+                    _updateTaskCompletion(task, value ?? false);
+                }
+              },
+              visualDensity: VisualDensity.compact,
             ),
-            title: Row(
-              children: [
-                Flexible(
-                  child: Text(
-                    task.title,
-                    maxLines: 1, // Limit title to 1 line
-                    overflow: TextOverflow.ellipsis, // Add ellipsis if overflow
-                    style: TextStyle(
-                      // Apply strikethrough based on instance completion
-                      decoration: isInstanceCompleted ? TextDecoration.lineThrough : null,
-                    ),
-                  ),
-                ),
-                if (task.isRecurring)
-                  Padding(
-                    padding: const EdgeInsets.only(left: 8.0),
-                    child: Icon(Icons.repeat, size: 16, color: Colors.grey),
-                  ),
-              ],
-            ),
-            subtitle: task.description.isNotEmpty 
-              ? Text(
-                  task.description, 
-                  maxLines: 2, // Limit description to 2 lines
-                  overflow: TextOverflow.ellipsis, // Add ellipsis if overflow
-                )
-              : null, // Hide subtitle if empty
-            trailing: Row(
-               mainAxisSize: MainAxisSize.min,
-               children: [
-                  SizedBox( // Wrap with SizedBox for max width
-                    width: 60, // Set a max width (adjust as needed)
-                    child: Text(
-                      task.category, 
-                      style: TextStyle(color: Colors.grey, fontSize: 12),
-                      maxLines: 1, // Limit to 1 line
-                      overflow: TextOverflow.ellipsis, // Add ellipsis
-                      softWrap: false, // Prevent wrapping before ellipsis
-                    ),
-                  ),
-                  SizedBox(width: 4),
-                  // --- Add Subtask Button ---
-                  IconButton(
-                     icon: Icon(Icons.add_circle_outline, size: 20, color: Colors.green),
-                     tooltip: 'Add Subtask',
-                     onPressed: () {
-                       _showAddSubtaskDialog(context, task); // Pass parent task
-                     },
-                     padding: EdgeInsets.zero,
-                     constraints: BoxConstraints(), // Remove default padding
-                  ),
-                  // -------------------------
-                  SizedBox(width: 4), // Spacing
-                  Material(
-                     type: MaterialType.transparency,
-                     child: InkWell(
-                        borderRadius: BorderRadius.circular(20),
-                        onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                 builder: (context) => FocusScreen(task: task),
-                              ),
-                            );
-                         },
-                         child: Padding(
-                           padding: const EdgeInsets.all(8.0),
-                           child: Icon(
-                             Icons.center_focus_strong,
-                             size: 24,
-                             color: Colors.blueAccent,
-                           ),
-                         ),
-                      ),
-                  ),
-               ]
-            ),
-            onTap: () async { // Make async to handle potential refresh
-              // Navigate and wait for a potential result (e.g., true if saved/deleted)
-              final result = await Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => EditTaskScreen(
-                     task: task, 
-                     taskBox: taskBox, 
-                     categoryBox: categoryBox
-                  ),
-                ),
-              );
-              // If the edit screen indicated a change, refresh the list
-              if (result == true && mounted) { 
-                setState(() {
-                  // Could potentially optimize by only reloading if necessary
-                  _loadTasksAndCategories(); 
-                });
-              }
-            },
-             onLongPress: () {
-                showDialog(
-                    context: context,
-                    builder: (BuildContext ctx) {
-                       return AlertDialog(
-                          title: Text('Delete Task'),
-                          content: Text('Are you sure you want to delete "${task.title}"? This will also delete its subtasks.'),
-                          actions: [
-                             TextButton(
-                                onPressed: () => Navigator.of(ctx).pop(),
-                                child: Text('Cancel'),
-                             ),
-                             TextButton(
-                                onPressed: () {
-                                   _deleteTask(task); // Updated delete function needed
-                                   Navigator.of(ctx).pop();
-                                },
-                                child: Text('Delete', style: TextStyle(color: Colors.red)),
-                             ),
-                          ],
-                       );
-                    },
-                );
-             },
-          ),
+          ],
         ),
+        title: Row(
+          children: [
+            Flexible(
+              child: Text(
+                task.title,
+                maxLines: 1, // Limit title to 1 line
+                overflow: TextOverflow.ellipsis, // Add ellipsis if overflow
+                style: TextStyle(
+                  // Apply strikethrough based on instance completion
+                  decoration: isInstanceCompleted ? TextDecoration.lineThrough : null,
+                ),
+              ),
+            ),
+            if (task.isRecurring)
+              Padding(
+                padding: const EdgeInsets.only(left: 8.0),
+                child: Icon(Icons.repeat, size: 16, color: Colors.grey),
+              ),
+          ],
+        ),
+        subtitle: task.description.isNotEmpty 
+          ? Text(
+              task.description, 
+              maxLines: 2, // Limit description to 2 lines
+              overflow: TextOverflow.ellipsis, // Add ellipsis if overflow
+            )
+          : null, // Hide subtitle if empty
+        trailing: Row(
+           mainAxisSize: MainAxisSize.min,
+           children: [
+              SizedBox( // Wrap with SizedBox for max width
+                width: 60, // Set a max width (adjust as needed)
+                child: Text(
+                  task.category, 
+                  style: TextStyle(color: Colors.grey, fontSize: 12),
+                  maxLines: 1, // Limit to 1 line
+                  overflow: TextOverflow.ellipsis, // Add ellipsis
+                  softWrap: false, // Prevent wrapping before ellipsis
+                ),
+              ),
+              SizedBox(width: 4),
+              // --- Add Subtask Button ---
+              IconButton(
+                 icon: Icon(Icons.add_circle_outline, size: 20, color: Colors.green),
+                 tooltip: 'Add Subtask',
+                 onPressed: () {
+                   _showAddSubtaskDialog(context, task); // Pass parent task
+                 },
+                 padding: EdgeInsets.zero,
+                 constraints: BoxConstraints(), // Remove default padding
+              ),
+              // -------------------------
+              SizedBox(width: 4), // Spacing
+              Material(
+                 type: MaterialType.transparency,
+                 child: InkWell(
+                    borderRadius: BorderRadius.circular(20),
+                    onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                             builder: (context) => FocusScreen(task: task),
+                          ),
+                        );
+                     },
+                     child: Padding(
+                       padding: const EdgeInsets.all(8.0),
+                       child: Icon(
+                         Icons.center_focus_strong,
+                         size: 24,
+                         color: Colors.blueAccent,
+                       ),
+                     ),
+                  ),
+              ),
+           ]
+        ),
+        onTap: () async { // Make async to handle potential refresh
+          // Navigate and wait for a potential result (e.g., true if saved/deleted)
+          final result = await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => EditTaskScreen(
+                 task: task, 
+                 taskBox: taskBox, 
+                 categoryBox: categoryBox
+              ),
+            ),
+          );
+          // If the edit screen indicated a change, refresh the list
+          if (result == true && mounted) { 
+            setState(() {
+              // Could potentially optimize by only reloading if necessary
+              _loadTasksAndCategories(); 
+            });
+          }
+        },
+         onLongPress: () {
+            showDialog(
+                context: context,
+                builder: (BuildContext ctx) {
+                   return AlertDialog(
+                      title: Text('Delete Task'),
+                      content: Text('Are you sure you want to delete "${task.title}"? This will also delete its subtasks.'),
+                      actions: [
+                         TextButton(
+                            onPressed: () => Navigator.of(ctx).pop(),
+                            child: Text('Cancel'),
+                         ),
+                         TextButton(
+                            onPressed: () {
+                               _deleteTask(task); // Updated delete function needed
+                               Navigator.of(ctx).pop();
+                            },
+                            child: Text('Delete', style: TextStyle(color: Colors.red)),
+                         ),
+                      ],
+                   );
+                },
+            );
+         },
       ),
     );
   }
@@ -732,23 +757,18 @@ class todoScreenState extends State<todoScreen> {
           content: _AddSubtaskDialogContent(
             parentTask: parentTask,
             onSubtaskAdded: (newSubtask) async { // Make async
-              // print('[AddSubtask] Adding subtask: ${newSubtask.title} to parent: ${parentTask.title}');
               // 1. Save the new subtask using its ID as the key
               await taskBox.put(newSubtask.id, newSubtask);
-              // print('[AddSubtask] New subtask ${newSubtask.id} put into box.');
               
               // 2. Update parent task's subtask list
               // Ensure parentTask is still valid/managed if necessary
               // If parentTask is directly from the box, modification and save should work.
               parentTask.subtaskIds.add(newSubtask.id);
               await parentTask.save(); 
-              // print('[AddSubtask] Parent task ${parentTask.id} updated and saved.');
 
               // 3. Refresh UI by reloading all data
               setState(() { 
-                  // print('[AddSubtask] Calling _loadTasksAndCategories inside setState...');
                   _loadTasksAndCategories(); // Reload data
-                  // print('[AddSubtask] State update triggered after adding subtask.');
               }); 
               Navigator.of(context).pop(); // Close dialog
               ScaffoldMessenger.of(context).showSnackBar(
@@ -903,10 +923,6 @@ class todoScreenState extends State<todoScreen> {
 
   // Helper method to show the add task dialog
   void _showAddTaskDialog(BuildContext context, String category) {
-    // --- Create a GlobalKey for the dialog content state ---
-    final GlobalKey<_AddTaskDialogContentState> _dialogContentKey = GlobalKey<_AddTaskDialogContentState>();
-    // --------------------------------------------------------
-
     showDialog(
       context: context,
       builder: (BuildContext context) {
@@ -915,7 +931,6 @@ class todoScreenState extends State<todoScreen> {
           title: Text("Add New Task to $category"),
           // Use a dedicated StatefulWidget for the content and state management
           content: _AddTaskDialogContent(
-            key: _dialogContentKey, // --- Assign the key ---
             category: category,
             initialDueDate: _selectedDate,
             onTaskAdded: (newTask) async { // Make async
@@ -942,15 +957,7 @@ class todoScreenState extends State<todoScreen> {
               onPressed: () => Navigator.of(context).pop(),
               child: Text("Cancel"),
             ),
-            // --- Add the "Add Task" button here ---
-            TextButton(
-              onPressed: () {
-                // Access the state via the key and call _addTask
-                _dialogContentKey.currentState?._addTask();
-              },
-              child: Text("Add Task"),
-            ),
-            // --------------------------------------
+            // The "Add Task" button logic is now inside _AddTaskDialogContent
           ],
         );
       },
@@ -1074,15 +1081,6 @@ class todoScreenState extends State<todoScreen> {
         }
      }
      // --- End Recursive Deletion --- 
-
-     // Original logic (partially redundant now or needs adjustment)
-     // tasksByCategory[task.category]?.removeWhere((t) => t.id == task.id);
-     // If category becomes empty, remove it (optional)
-     // if (tasksByCategory[task.category]?.isEmpty ?? false) {
-     //     tasksByCategory.remove(task.category);
-     //     // Also remove from categoryBox
-     //     categoryBox.deleteAt(categoryBox.values.toList().indexOf(task.category));
-     // }
 
      // Refresh UI (might need more sophisticated state update)
      setState(() { _loadTasksAndCategories(); }); 
@@ -1282,6 +1280,11 @@ class _AddTaskDialogContentState extends State<_AddTaskDialogContent> {
                 ),
               ],
             ),
+            SizedBox(height: 20),
+            ElevatedButton(
+                onPressed: _addTask, // Call the internal add task method
+                child: Text("Add Task"),
+            )
           ],
         ),
       ),

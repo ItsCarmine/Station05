@@ -6,6 +6,61 @@ import 'focus_log_model.dart';
 import 'goal_model.dart'; // May need for category info if not passed
 import 'main.dart'; // For box names & ID generator
 
+// Move helper functions outside of classes to make them accessible globally
+Widget getStatusIcon(FocusSessionStatus status) {
+  switch (status) {
+    case FocusSessionStatus.completed:
+      return Icon(Icons.check_circle, color: Colors.green);
+    case FocusSessionStatus.failed:
+      return Icon(Icons.cancel, color: Colors.red);
+    case FocusSessionStatus.inProgress:
+      return Icon(Icons.timelapse, color: Colors.orange);
+    case FocusSessionStatus.skipped:
+      return Icon(Icons.skip_next, color: Colors.grey);
+    default:
+      return Icon(Icons.timer_outlined);
+  }
+}
+
+Widget getStatusChip(FocusSessionStatus status) {
+  Color chipColor;
+  String label;
+  
+  switch (status) {
+    case FocusSessionStatus.completed:
+      chipColor = Colors.green.shade100;
+      label = 'Completed';
+      break;
+    case FocusSessionStatus.failed:
+      chipColor = Colors.red.shade100;
+      label = 'Failed';
+      break;
+    case FocusSessionStatus.inProgress:
+      chipColor = Colors.orange.shade100;
+      label = 'In Progress';
+      break;
+    case FocusSessionStatus.skipped:
+      chipColor = Colors.grey.shade200;
+      label = 'Skipped';
+      break;
+    default:
+      chipColor = Colors.blue.shade100;
+      label = 'Unknown';
+  }
+  
+  return Container(
+    padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+    decoration: BoxDecoration(
+      color: chipColor,
+      borderRadius: BorderRadius.circular(12),
+    ),
+    child: Text(
+      label,
+      style: TextStyle(fontSize: 12),
+    ),
+  );
+}
+
 class LogScreen extends StatefulWidget {
   const LogScreen({super.key});
 
@@ -45,6 +100,32 @@ class _LogScreenState extends State<LogScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text("Focus Log"),
+        actions: [
+          // Add filter option
+          PopupMenuButton<String>(
+            icon: Icon(Icons.filter_list),
+            tooltip: 'Filter by Status',
+            onSelected: (value) {
+              setState(() {
+                // Implement filter logic here if needed
+              });
+            },
+            itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+              PopupMenuItem<String>(
+                value: 'all',
+                child: Text('All Sessions'),
+              ),
+              PopupMenuItem<String>(
+                value: 'completed',
+                child: Text('Completed Only'),
+              ),
+              PopupMenuItem<String>(
+                value: 'failed',
+                child: Text('Failed Only'),
+              ),
+            ],
+          )
+        ],
       ),
       body: ValueListenableBuilder(
         valueListenable: logBox.listenable(),
@@ -63,22 +144,48 @@ class _LogScreenState extends State<LogScreen> {
           var sortedLogs = box.values.toList()
             ..sort((a, b) => b.startTime.compareTo(a.startTime));
 
+          // Debug: Print all logs with their statuses
+          for (var log in sortedLogs) {
+            print("Log: ${log.id}, Category: ${log.categoryName}, Status: ${log.status}, Date: ${log.startTime}");
+          }
+
           return ListView.builder(
             itemCount: sortedLogs.length,
             itemBuilder: (context, index) {
               final log = sortedLogs[index];
-              return ListTile(
-                leading: Icon(Icons.timer_outlined), // Or category icon?
-                title: Text(log.categoryName),
-                subtitle: Text(
-                  "${DateFormat.yMd().add_jm().format(log.startTime)} - ${_formatDuration(log.durationSeconds)}",
+              
+              // Background color based on status
+              Color? backgroundColor;
+              if (log.status == FocusSessionStatus.failed) {
+                backgroundColor = Colors.red.shade50;
+              } else if (log.status == FocusSessionStatus.completed) {
+                backgroundColor = Colors.green.shade50;
+              }
+              
+              return Card(
+                margin: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                color: backgroundColor,
+                child: ListTile(
+                  leading: getStatusIcon(log.status), // Using the global function
+                  title: Row(
+                    children: [
+                      Expanded(child: Text(log.categoryName)),
+                      SizedBox(width: 8),
+                      getStatusChip(log.status), // Using the global function
+                    ],
+                  ),
+                  subtitle: Text(
+                    "${DateFormat.yMd().add_jm().format(log.startTime)} - ${_formatDuration(log.durationSeconds)}",
+                  ),
+                  trailing: IconButton(
+                    icon: Icon(Icons.delete_outline),
+                    onPressed: () => _confirmDeleteLogEntry(context, log),
+                  ),
+                  onTap: () {
+                    // Show details dialog if needed
+                    _showLogDetailsDialog(context, log);
+                  },
                 ),
-                trailing: IconButton(
-                  icon: Icon(Icons.delete_outline, color: Colors.redAccent),
-                  tooltip: 'Delete Log Entry',
-                  onPressed: () => _confirmDeleteLogEntry(context, log),
-                ),
-                // TODO: Add onTap to edit manual entry?
               );
             },
           );
@@ -89,6 +196,56 @@ class _LogScreenState extends State<LogScreen> {
         onPressed: () => _showAddLogEntryDialog(context),
         child: Icon(Icons.add_comment_outlined),
       ),
+    );
+  }
+
+  // New method to show log details
+  void _showLogDetailsDialog(BuildContext context, FocusSessionLog log) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('Focus Session Details'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ListTile(
+                title: Text('Category'),
+                subtitle: Text(log.categoryName),
+              ),
+              ListTile(
+                title: Text('Date'),
+                subtitle: Text(DateFormat.yMd().format(log.startTime)),
+              ),
+              ListTile(
+                title: Text('Time'),
+                subtitle: Text(DateFormat.jm().format(log.startTime)),
+              ),
+              ListTile(
+                title: Text('Duration'),
+                subtitle: Text(_formatDuration(log.durationSeconds)),
+              ),
+              ListTile(
+                title: Text('Status'),
+                subtitle: Row(
+                  children: [
+                    getStatusIcon(log.status), // Using the global function
+                    SizedBox(width: 8),
+                    Text(log.status.toString().split('.').last),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text('Close'),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -108,15 +265,16 @@ class _LogScreenState extends State<LogScreen> {
           title: Text("Add Manual Log Entry"),
           content: _AddLogEntryDialogContent(
             availableCategories: categoryBox.values.toList(),
-            onLogAdded: (category, date, durationMinutes) {
+            onLogAdded: (category, date, durationMinutes, status) {
               final seconds = (durationMinutes * 60).round();
               // Use DateUtils.dateOnly to ensure startTime is at the beginning of the day
-              final startTime = DateUtils.dateOnly(date);
+              final startTime = date;
               final newLog = FocusSessionLog(
                 id: generateUniqueId(), // Use the global helper
                 categoryName: category,
                 startTime: startTime, 
                 durationSeconds: seconds,
+                status: status, // Use the provided status
               );
               logBox.put(newLog.id, newLog);
               Navigator.of(context).pop(); // Close dialog
@@ -169,8 +327,8 @@ class _LogScreenState extends State<LogScreen> {
 
 class _AddLogEntryDialogContent extends StatefulWidget {
   final List<String> availableCategories;
-  // Takes category, date, and duration in minutes
-  final Function(String category, DateTime date, double durationMinutes) onLogAdded;
+  // Takes category, date, duration in minutes, and status
+  final Function(String category, DateTime date, double durationMinutes, FocusSessionStatus status) onLogAdded;
 
   const _AddLogEntryDialogContent({
     super.key,
@@ -186,7 +344,9 @@ class _AddLogEntryDialogContentState extends State<_AddLogEntryDialogContent> {
   final _formKey = GlobalKey<FormState>();
   String? _selectedCategory;
   DateTime _selectedDate = DateTime.now(); // Default to today
+  TimeOfDay _selectedTime = TimeOfDay.now(); // Default to current time
   double? _durationMinutes;
+  FocusSessionStatus _status = FocusSessionStatus.completed; // Default status
 
   Future<void> _pickDate(BuildContext context) async {
     final DateTime? picked = await showDatePicker(
@@ -198,6 +358,18 @@ class _AddLogEntryDialogContentState extends State<_AddLogEntryDialogContent> {
     if (picked != null && picked != _selectedDate) {
       setState(() {
         _selectedDate = picked;
+      });
+    }
+  }
+
+  Future<void> _pickTime(BuildContext context) async {
+    final TimeOfDay? picked = await showTimePicker(
+      context: context,
+      initialTime: _selectedTime,
+    );
+    if (picked != null && picked != _selectedTime) {
+      setState(() {
+        _selectedTime = picked;
       });
     }
   }
@@ -247,6 +419,22 @@ class _AddLogEntryDialogContentState extends State<_AddLogEntryDialogContent> {
               ),
             ),
             SizedBox(height: 16),
+            // Time Picker
+            Text("Time:"),
+            InkWell(
+              onTap: () => _pickTime(context),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8.0),
+                child: Row(
+                  children: [
+                    Icon(Icons.access_time, size: 18),
+                    SizedBox(width: 8),
+                    Text(_selectedTime.format(context)),
+                  ],
+                ),
+              ),
+            ),
+            SizedBox(height: 16),
             // Duration Input (Minutes)
             TextFormField(
               decoration: InputDecoration(labelText: 'Duration (minutes)'),
@@ -263,6 +451,35 @@ class _AddLogEntryDialogContentState extends State<_AddLogEntryDialogContent> {
               },
               onSaved: (value) => _durationMinutes = double.tryParse(value!),
             ),
+            SizedBox(height: 16),
+            // Status Selection
+            Text("Session Status:"),
+            DropdownButtonFormField<FocusSessionStatus>(
+              value: _status,
+              onChanged: (value) {
+                if (value != null) {
+                  setState(() {
+                    _status = value;
+                  });
+                }
+              },
+              items: FocusSessionStatus.values.map((status) {
+                String label = status.toString().split('.').last;
+                // Capitalize first letter
+                label = label[0].toUpperCase() + label.substring(1);
+                
+                return DropdownMenuItem<FocusSessionStatus>(
+                  value: status,
+                  child: Row(
+                    children: [
+                      getStatusIcon(status), // Using the global function
+                      SizedBox(width: 8),
+                      Text(label),
+                    ],
+                  ),
+                );
+              }).toList(),
+            ),
             SizedBox(height: 20),
             // Add Button
             Center(
@@ -271,7 +488,16 @@ class _AddLogEntryDialogContentState extends State<_AddLogEntryDialogContent> {
                   if (_formKey.currentState!.validate()) {
                     _formKey.currentState!.save();
                     if (_selectedCategory != null && _durationMinutes != null) {
-                      widget.onLogAdded(_selectedCategory!, _selectedDate, _durationMinutes!);
+                      // Combine date and time
+                      final combinedDateTime = DateTime(
+                        _selectedDate.year,
+                        _selectedDate.month,
+                        _selectedDate.day,
+                        _selectedTime.hour,
+                        _selectedTime.minute,
+                      );
+                      
+                      widget.onLogAdded(_selectedCategory!, combinedDateTime, _durationMinutes!, _status);
                     }
                   }
                 },
@@ -283,4 +509,5 @@ class _AddLogEntryDialogContentState extends State<_AddLogEntryDialogContent> {
       ),
     );
   }
-} 
+}
+

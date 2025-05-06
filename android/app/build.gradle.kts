@@ -10,6 +10,11 @@ android {
     compileSdk = flutter.compileSdkVersion
     ndkVersion = "27.0.12077973"
 
+    // the version of sdk that works for my local machine is the 27 version so i had added if the original ndkversion does not work it will use that 2nd one 
+    //ndkVersion = flutter.ndkVersion ?: "27.0.12077973"
+     ndkVersion = "27.0.12077973"
+    //26.3.11579264
+    //27.0.12077973
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
